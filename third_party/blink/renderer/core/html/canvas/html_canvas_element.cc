@@ -45,6 +45,7 @@
 #include "build/build_config.h"
 #include "cc/layers/texture_layer.h"
 #include "cc/trees/layer_tree_host.h"
+#include "components/privacy_cef/privacy_runtime.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/common/features.h"
@@ -127,12 +128,14 @@
 #include "third_party/blink/renderer/platform/image-encoders/image_encoder_utils.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/base/resource/resource_scale_factor.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/gfx/skia_span_util.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -1291,6 +1294,15 @@ String HTMLCanvasElement::ToDataURLInternal(
         ImageDataBuffer::Create(image_bitmap);
     if (!data_buffer)
       return String("data:,");
+
+    // Ported from Brave Core's HTMLCanvasElement::ToDataURLInternal hook at
+    // commit 66867f5c43390a235672bfc3e091d02e84d6892c.
+    if (ExecutionContext* context = GetExecutionContext()) {
+      privacy_cef::PrivacyRuntime::GetInstance().ProtectCanvasPixels(
+          context->GetSecurityOrigin()->ToString().Utf8(),
+          gfx::SkPixmapToWritableSpan(
+              data_buffer->MutablePixmapForPrivacy()));
+    }
 
     String data_url = data_buffer->ToDataURL(encoding_mime_type, quality);
     base::TimeDelta elapsed_time = base::TimeTicks::Now() - start_time;
