@@ -1,0 +1,31 @@
+source_set("privacy_cef") {
+  sources = [
+    "privacy_audit_service.cc",
+    "privacy_audit_service.h",
+    "privacy_profile.cc",
+    "privacy_profile.h",
+    "privacy_seed.cc",
+    "privacy_seed.h",
+    "privacy_switches.cc",
+    "privacy_switches.h",
+  ]
+
+  deps = [
+    "//base",
+    "//crypto",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "privacy_profile_unittest.cc",
+    "privacy_seed_unittest.cc",
+  ]
+  deps = [
+    ":privacy_cef",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
+}
+
