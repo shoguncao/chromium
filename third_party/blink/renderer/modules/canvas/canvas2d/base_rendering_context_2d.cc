@@ -26,6 +26,7 @@
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_image.h"
 #include "cc/paint/record_paint_canvas.h"
+#include "components/privacy_cef/privacy_runtime.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
@@ -46,6 +47,7 @@
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/geometry/dom_matrix.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_font_cache.h"
@@ -97,12 +99,14 @@
 #include "third_party/blink/renderer/platform/text/text_run.h"
 #include "third_party/blink/renderer/platform/text/unicode_bidi.h"
 #include "third_party/blink/renderer/platform/timer.h"
+#include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/gfx/geometry/vector2d_f.h"
+#include "ui/gfx/skia_span_util.h"
 
 // Including "base/time/time.h" triggers a bug in IWYU.
 // https://github.com/include-what-you-use/include-what-you-use/issues/1122
@@ -532,6 +536,16 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
           snapshot->PaintImageForCurrentFrame().GetSkImageInfo().bounds();
       DCHECK(!bounds.intersect(SkIRect::MakeXYWH(sx, sy, sw, sh)));
     }
+  }
+
+  // Ported from Brave Core's BaseRenderingContext2D::getImageData hook at
+  // commit 66867f5c43390a235672bfc3e091d02e84d6892c. Privacy CEF supplies the
+  // persistent per-profile/site seed instead of Brave's session token.
+  if (ExecutionContext* context = GetTopExecutionContext()) {
+    SkPixmap image_data_pixmap = image_data->GetSkPixmap();
+    privacy_cef::PrivacyRuntime::GetInstance().ProtectCanvasPixels(
+        context->GetSecurityOrigin()->ToString().Utf8(),
+        gfx::SkPixmapToWritableSpan(image_data_pixmap));
   }
 
   return image_data;

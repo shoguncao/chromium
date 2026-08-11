@@ -6,6 +6,8 @@ source_set("privacy_cef") {
     "privacy_audit_service.h",
     "privacy_profile.cc",
     "privacy_profile.h",
+    "privacy_runtime.cc",
+    "privacy_runtime.h",
     "privacy_seed.cc",
     "privacy_seed.h",
     "privacy_switches.cc",
@@ -23,6 +25,7 @@ source_set("unit_tests") {
   sources = [
     "canvas_farbling_unittest.cc",
     "privacy_profile_unittest.cc",
+    "privacy_runtime_unittest.cc",
     "privacy_seed_unittest.cc",
   ]
   deps = [
