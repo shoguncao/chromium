@@ -1,0 +1,55 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef COMPONENTS_PRIVACY_CEF_PRIVACY_PROFILE_H_
+#define COMPONENTS_PRIVACY_CEF_PRIVACY_PROFILE_H_
+
+#include <array>
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "base/files/file_path.h"
+
+namespace privacy_cef {
+
+enum class AuditMode { kOff, kSummary, kFull };
+enum class CanvasMode { kOff, kFarble, kBlock };
+
+struct PrivacyProfile {
+  static constexpr int kSupportedSchemaVersion = 1;
+  static constexpr int kMasterSeedBytes = 32;
+
+  int schema_version = 0;
+  std::string profile_id;
+  std::string display_name;
+  std::array<uint8_t, kMasterSeedBytes> master_seed{};
+  std::string preset;
+  std::string language;
+  std::vector<std::string> languages;
+  std::string timezone;
+  int cpu_cores = 0;
+  int memory_gb = 0;
+  int screen_width = 0;
+  int screen_height = 0;
+  int device_scale_factor = 0;
+  int color_depth = 0;
+  std::string color_gamut;
+  AuditMode audit_mode = AuditMode::kOff;
+  int audit_retention_days = 0;
+  int audit_max_file_size_mb = 0;
+  CanvasMode canvas_mode = CanvasMode::kOff;
+  std::string canvas_algorithm;
+  int canvas_algorithm_version = 0;
+
+  static std::optional<PrivacyProfile> LoadFromFile(const base::FilePath& path,
+                                                    std::string* error);
+  static std::optional<PrivacyProfile> Parse(std::string_view json,
+                                             std::string* error);
+};
+
+}  // namespace privacy_cef
+
+#endif  // COMPONENTS_PRIVACY_CEF_PRIVACY_PROFILE_H_
