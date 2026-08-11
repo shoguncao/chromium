@@ -24,17 +24,17 @@ bool Fail(std::string_view message, std::string* error) {
   return false;
 }
 
-const base::Value::Dict* RequiredDict(const base::Value::Dict& parent,
-                                      std::string_view key,
-                                      std::string* error) {
-  const base::Value::Dict* value = parent.FindDict(key);
+const base::DictValue* RequiredDict(const base::DictValue& parent,
+                                    std::string_view key,
+                                    std::string* error) {
+  const base::DictValue* value = parent.FindDict(key);
   if (!value) {
     Fail(std::string("missing object: ") + std::string(key), error);
   }
   return value;
 }
 
-const std::string* RequiredString(const base::Value::Dict& parent,
+const std::string* RequiredString(const base::DictValue& parent,
                                   std::string_view key,
                                   std::string* error) {
   const std::string* value = parent.FindString(key);
@@ -45,7 +45,7 @@ const std::string* RequiredString(const base::Value::Dict& parent,
   return value;
 }
 
-std::optional<int> RequiredInt(const base::Value::Dict& parent,
+std::optional<int> RequiredInt(const base::DictValue& parent,
                                std::string_view key,
                                std::string* error) {
   std::optional<int> value = parent.FindInt(key);
@@ -57,64 +57,71 @@ std::optional<int> RequiredInt(const base::Value::Dict& parent,
 
 }  // namespace
 
+PrivacyProfile::PrivacyProfile() = default;
+PrivacyProfile::PrivacyProfile(const PrivacyProfile&) = default;
+PrivacyProfile& PrivacyProfile::operator=(const PrivacyProfile&) = default;
+PrivacyProfile::PrivacyProfile(PrivacyProfile&&) = default;
+PrivacyProfile& PrivacyProfile::operator=(PrivacyProfile&&) = default;
+PrivacyProfile::~PrivacyProfile() = default;
+
 std::string PrivacyProfile::SerializeForRenderer() const {
-  base::Value::Dict locale;
+  base::DictValue locale;
   locale.Set("language", language);
-  base::Value::List language_list;
+  base::ListValue language_list;
   for (const std::string& item : languages) {
     language_list.Append(item);
   }
   locale.Set("languages", std::move(language_list));
   locale.Set("timezone", timezone);
 
-  base::Value::Dict hardware;
+  base::DictValue hardware;
   hardware.Set("cpuCores", cpu_cores);
   hardware.Set("memoryGB", memory_gb);
 
-  base::Value::Dict display;
+  base::DictValue display;
   display.Set("width", screen_width);
   display.Set("height", screen_height);
   display.Set("deviceScaleFactor", device_scale_factor);
   display.Set("colorDepth", color_depth);
   display.Set("colorGamut", color_gamut);
 
-  std::string audit_mode;
+  std::string audit_mode_name;
   switch (this->audit_mode) {
     case AuditMode::kOff:
-      audit_mode = "off";
+      audit_mode_name = "off";
       break;
     case AuditMode::kSummary:
-      audit_mode = "summary";
+      audit_mode_name = "summary";
       break;
     case AuditMode::kFull:
-      audit_mode = "full";
+      audit_mode_name = "full";
       break;
   }
-  base::Value::Dict audit;
-  audit.Set("mode", audit_mode);
+  base::DictValue audit;
+  audit.Set("mode", audit_mode_name);
   audit.Set("retentionDays", audit_retention_days);
   audit.Set("maxFileSizeMB", audit_max_file_size_mb);
 
-  std::string canvas_mode;
+  std::string canvas_mode_name;
   switch (this->canvas_mode) {
     case CanvasMode::kOff:
-      canvas_mode = "off";
+      canvas_mode_name = "off";
       break;
     case CanvasMode::kFarble:
-      canvas_mode = "farble";
+      canvas_mode_name = "farble";
       break;
     case CanvasMode::kBlock:
-      canvas_mode = "block";
+      canvas_mode_name = "block";
       break;
   }
-  base::Value::Dict canvas;
-  canvas.Set("mode", canvas_mode);
+  base::DictValue canvas;
+  canvas.Set("mode", canvas_mode_name);
   canvas.Set("algorithm", canvas_algorithm);
   canvas.Set("algorithmVersion", canvas_algorithm_version);
-  base::Value::Dict protections;
+  base::DictValue protections;
   protections.Set("canvas", std::move(canvas));
 
-  base::Value::Dict root;
+  base::DictValue root;
   root.Set("schemaVersion", schema_version);
   root.Set("profileId", profile_id);
   root.Set("displayName", display_name);
@@ -144,7 +151,7 @@ std::optional<PrivacyProfile> PrivacyProfile::LoadFromFile(
 
 std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
                                                     std::string* error) {
-  std::optional<base::Value::Dict> root =
+  std::optional<base::DictValue> root =
       base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
   if (!root) {
     Fail("invalid JSON", error);
@@ -173,22 +180,22 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
     return std::nullopt;
   }
 
-  const base::Value::Dict* locale = RequiredDict(*root, "locale", error);
-  const base::Value::Dict* hardware = RequiredDict(*root, "hardware", error);
-  const base::Value::Dict* display = RequiredDict(*root, "display", error);
-  const base::Value::Dict* audit = RequiredDict(*root, "audit", error);
-  const base::Value::Dict* protections =
+  const base::DictValue* locale = RequiredDict(*root, "locale", error);
+  const base::DictValue* hardware = RequiredDict(*root, "hardware", error);
+  const base::DictValue* display = RequiredDict(*root, "display", error);
+  const base::DictValue* audit = RequiredDict(*root, "audit", error);
+  const base::DictValue* protections =
       RequiredDict(*root, "protections", error);
   if (!locale || !hardware || !display || !audit || !protections) {
     return std::nullopt;
   }
-  const base::Value::Dict* canvas = RequiredDict(*protections, "canvas", error);
+  const base::DictValue* canvas = RequiredDict(*protections, "canvas", error);
   if (!canvas) {
     return std::nullopt;
   }
 
   const std::string* language = RequiredString(*locale, "language", error);
-  const base::Value::List* languages = locale->FindList("languages");
+  const base::ListValue* languages = locale->FindList("languages");
   const std::string* timezone = RequiredString(*locale, "timezone", error);
   std::optional<int> cpu_cores = RequiredInt(*hardware, "cpuCores", error);
   std::optional<int> memory_gb = RequiredInt(*hardware, "memoryGB", error);

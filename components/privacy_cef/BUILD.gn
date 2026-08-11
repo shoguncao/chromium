@@ -1,3 +1,5 @@
+import("//testing/test.gni")
+
 source_set("privacy_cef") {
   sources = [
     "canvas_farbling.cc",
@@ -32,5 +34,14 @@ source_set("unit_tests") {
     ":privacy_cef",
     "//base/test:test_support",
     "//testing/gtest",
+  ]
+}
+
+test("privacy_cef_unit_tests") {
+  deps = [
+    ":unit_tests",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
   ]
 }
