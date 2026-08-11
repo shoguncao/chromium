@@ -8,6 +8,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
+#include "components/privacy_cef/privacy_runtime.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -32,8 +33,10 @@
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/base64.h"
 #include "third_party/blink/renderer/platform/wtf/text/strcat.h"
+#include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/encode/SkPngRustEncoder.h"
+#include "ui/gfx/skia_span_util.h"
 
 namespace blink {
 
@@ -207,6 +210,12 @@ CanvasAsyncBlobCreator::CanvasAsyncBlobCreator(
                            std::min(info.height(), max_dimension));
         src_data_.reset(info, src_data_.addr(), src_data_.rowBytes());
       }
+
+      // Ported from Brave Core's CanvasAsyncBlobCreator hook at commit
+      // 66867f5c43390a235672bfc3e091d02e84d6892c.
+      privacy_cef::PrivacyRuntime::GetInstance().ProtectCanvasPixels(
+          context_->GetSecurityOrigin()->ToString().Utf8(),
+          gfx::SkPixmapToWritableSpan(src_data_));
     }
   }
 

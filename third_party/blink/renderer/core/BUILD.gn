@@ -406,6 +406,7 @@ component("core") {
     "//base",
     "//components/attribution_reporting",
     "//components/attribution_reporting:mojom_blink",
+    "//components/privacy_cef",
     "//components/paint_preview/common",
     "//components/performance_manager/public/mojom:mojom_blink",
     "//components/shared_highlighting/core/common",
