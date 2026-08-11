@@ -64,4 +64,20 @@ TEST(PrivacyProfileTest, RejectsUnknownCanvasAlgorithmVersion) {
   EXPECT_EQ(error, "unsupported Canvas farbling algorithm");
 }
 
+TEST(PrivacyProfileTest, RendererPayloadRoundTripsThroughValidation) {
+  std::string error;
+  std::optional<PrivacyProfile> profile =
+      PrivacyProfile::Parse(kValidProfile, &error);
+  ASSERT_TRUE(profile) << error;
+
+  std::optional<PrivacyProfile> round_trip =
+      PrivacyProfile::Parse(profile->SerializeForRenderer(), &error);
+  ASSERT_TRUE(round_trip) << error;
+  EXPECT_EQ(round_trip->profile_id, profile->profile_id);
+  EXPECT_EQ(round_trip->master_seed, profile->master_seed);
+  EXPECT_EQ(round_trip->canvas_mode, profile->canvas_mode);
+  EXPECT_EQ(round_trip->canvas_algorithm, profile->canvas_algorithm);
+  EXPECT_EQ(round_trip->languages, profile->languages);
+}
+
 }  // namespace privacy_cef
