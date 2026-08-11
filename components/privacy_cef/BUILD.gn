@@ -1,5 +1,7 @@
 source_set("privacy_cef") {
   sources = [
+    "canvas_farbling.cc",
+    "canvas_farbling.h",
     "privacy_audit_service.cc",
     "privacy_audit_service.h",
     "privacy_profile.cc",
@@ -19,6 +21,7 @@ source_set("privacy_cef") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "canvas_farbling_unittest.cc",
     "privacy_profile_unittest.cc",
     "privacy_seed_unittest.cc",
   ]
@@ -28,4 +31,3 @@ source_set("unit_tests") {
     "//testing/gtest",
   ]
 }
-
