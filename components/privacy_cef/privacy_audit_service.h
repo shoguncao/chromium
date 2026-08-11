@@ -16,6 +16,13 @@
 namespace privacy_cef {
 
 struct PrivacyAuditEvent {
+  PrivacyAuditEvent();
+  PrivacyAuditEvent(const PrivacyAuditEvent&);
+  PrivacyAuditEvent& operator=(const PrivacyAuditEvent&);
+  PrivacyAuditEvent(PrivacyAuditEvent&&);
+  PrivacyAuditEvent& operator=(PrivacyAuditEvent&&);
+  ~PrivacyAuditEvent();
+
   std::string process_type;
   int process_id = 0;
   int thread_id = 0;

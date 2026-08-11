@@ -12,18 +12,11 @@
 #include "crypto/hmac.h"
 
 namespace privacy_cef {
-namespace {
-
-base::span<const uint8_t> AsBytes(std::string_view value) {
-  return base::span(reinterpret_cast<const uint8_t*>(value.data()),
-                    value.size());
-}
-
-}  // namespace
 
 PrivacySeed DeriveSiteSeed(const PrivacyProfile& profile,
                            std::string_view top_level_site) {
-  return crypto::hmac::SignSha256(profile.master_seed, AsBytes(top_level_site));
+  return crypto::hmac::SignSha256(profile.master_seed,
+                                  base::as_byte_span(top_level_site));
 }
 
 PrivacySeed DeriveOperationSeed(const PrivacySeed& site_seed,
@@ -33,7 +26,7 @@ PrivacySeed DeriveOperationSeed(const PrivacySeed& site_seed,
   const std::string context =
       base::StrCat({algorithm, "\n", base::NumberToString(algorithm_version),
                     "\n", input_digest});
-  return crypto::hmac::SignSha256(site_seed, AsBytes(context));
+  return crypto::hmac::SignSha256(site_seed, base::as_byte_span(context));
 }
 
 }  // namespace privacy_cef

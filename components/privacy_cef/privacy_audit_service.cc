@@ -13,6 +13,14 @@
 
 namespace privacy_cef {
 
+PrivacyAuditEvent::PrivacyAuditEvent() = default;
+PrivacyAuditEvent::PrivacyAuditEvent(const PrivacyAuditEvent&) = default;
+PrivacyAuditEvent& PrivacyAuditEvent::operator=(const PrivacyAuditEvent&) =
+    default;
+PrivacyAuditEvent::PrivacyAuditEvent(PrivacyAuditEvent&&) = default;
+PrivacyAuditEvent& PrivacyAuditEvent::operator=(PrivacyAuditEvent&&) = default;
+PrivacyAuditEvent::~PrivacyAuditEvent() = default;
+
 PrivacyAuditService::PrivacyAuditService(base::FilePath path, AuditMode mode)
     : path_(std::move(path)), mode_(mode) {}
 
@@ -24,7 +32,7 @@ bool PrivacyAuditService::Record(PrivacyAuditEvent event) {
   }
 
   base::AutoLock guard(lock_);
-  base::Value::Dict value;
+  base::DictValue value;
   value.Set("sequence", static_cast<double>(next_sequence_++));
   value.Set("timestampMs", base::Time::Now().InMillisecondsFSinceUnixEpoch());
   value.Set("processType", std::move(event.process_type));

@@ -22,6 +22,13 @@ struct PrivacyProfile {
   static constexpr int kSupportedSchemaVersion = 1;
   static constexpr int kMasterSeedBytes = 32;
 
+  PrivacyProfile();
+  PrivacyProfile(const PrivacyProfile&);
+  PrivacyProfile& operator=(const PrivacyProfile&);
+  PrivacyProfile(PrivacyProfile&&);
+  PrivacyProfile& operator=(PrivacyProfile&&);
+  ~PrivacyProfile();
+
   int schema_version = 0;
   std::string profile_id;
   std::string display_name;
