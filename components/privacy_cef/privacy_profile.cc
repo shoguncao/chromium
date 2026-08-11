@@ -8,8 +8,10 @@
 #include <utility>
 
 #include "base/base64.h"
+#include "base/check.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/values.h"
 
 namespace privacy_cef {
@@ -54,6 +56,80 @@ std::optional<int> RequiredInt(const base::Value::Dict& parent,
 }
 
 }  // namespace
+
+std::string PrivacyProfile::SerializeForRenderer() const {
+  base::Value::Dict locale;
+  locale.Set("language", language);
+  base::Value::List language_list;
+  for (const std::string& item : languages) {
+    language_list.Append(item);
+  }
+  locale.Set("languages", std::move(language_list));
+  locale.Set("timezone", timezone);
+
+  base::Value::Dict hardware;
+  hardware.Set("cpuCores", cpu_cores);
+  hardware.Set("memoryGB", memory_gb);
+
+  base::Value::Dict display;
+  display.Set("width", screen_width);
+  display.Set("height", screen_height);
+  display.Set("deviceScaleFactor", device_scale_factor);
+  display.Set("colorDepth", color_depth);
+  display.Set("colorGamut", color_gamut);
+
+  std::string audit_mode;
+  switch (this->audit_mode) {
+    case AuditMode::kOff:
+      audit_mode = "off";
+      break;
+    case AuditMode::kSummary:
+      audit_mode = "summary";
+      break;
+    case AuditMode::kFull:
+      audit_mode = "full";
+      break;
+  }
+  base::Value::Dict audit;
+  audit.Set("mode", audit_mode);
+  audit.Set("retentionDays", audit_retention_days);
+  audit.Set("maxFileSizeMB", audit_max_file_size_mb);
+
+  std::string canvas_mode;
+  switch (this->canvas_mode) {
+    case CanvasMode::kOff:
+      canvas_mode = "off";
+      break;
+    case CanvasMode::kFarble:
+      canvas_mode = "farble";
+      break;
+    case CanvasMode::kBlock:
+      canvas_mode = "block";
+      break;
+  }
+  base::Value::Dict canvas;
+  canvas.Set("mode", canvas_mode);
+  canvas.Set("algorithm", canvas_algorithm);
+  canvas.Set("algorithmVersion", canvas_algorithm_version);
+  base::Value::Dict protections;
+  protections.Set("canvas", std::move(canvas));
+
+  base::Value::Dict root;
+  root.Set("schemaVersion", schema_version);
+  root.Set("profileId", profile_id);
+  root.Set("displayName", display_name);
+  root.Set("masterSeed", base::Base64Encode(master_seed));
+  root.Set("preset", preset);
+  root.Set("locale", std::move(locale));
+  root.Set("hardware", std::move(hardware));
+  root.Set("display", std::move(display));
+  root.Set("audit", std::move(audit));
+  root.Set("protections", std::move(protections));
+
+  std::string json;
+  CHECK(base::JSONWriter::Write(root, &json));
+  return json;
+}
 
 std::optional<PrivacyProfile> PrivacyProfile::LoadFromFile(
     const base::FilePath& path,

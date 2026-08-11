@@ -48,6 +48,10 @@ struct PrivacyProfile {
                                                     std::string* error);
   static std::optional<PrivacyProfile> Parse(std::string_view json,
                                              std::string* error);
+
+  // Canonical Browser-to-Renderer IPC payload. It contains the master seed
+  // and must never be logged or exposed to page JavaScript.
+  std::string SerializeForRenderer() const;
 };
 
 }  // namespace privacy_cef
