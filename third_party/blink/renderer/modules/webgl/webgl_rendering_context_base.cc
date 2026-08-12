@@ -41,6 +41,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "components/privacy_cef/privacy_runtime.h"
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "device/vr/buildflags/buildflags.h"
@@ -79,6 +80,7 @@
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
 #include "third_party/blink/renderer/core/html/canvas/predefined_color_space.h"
+#include "third_party/blink/renderer/core/html/canvas/privacy_canvas_context.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/media/html_video_element.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
@@ -107,6 +109,7 @@
 #include "third_party/blink/renderer/modules/webgl/oes_texture_half_float.h"
 #include "third_party/blink/renderer/modules/webgl/oes_texture_half_float_linear.h"
 #include "third_party/blink/renderer/modules/webgl/oes_vertex_array_object.h"
+#include "third_party/blink/renderer/modules/webgl/privacy_webgl_extension_handler.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_active_info.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_buffer.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_compressed_texture_astc.h"
@@ -132,6 +135,7 @@
 #include "third_party/blink/renderer/modules/webgl/webgl_vertex_array_object_oes.h"
 #include "third_party/blink/renderer/modules/xr/xr_system.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/bindings/v8_binding.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/graphics/accelerated_static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_non2d_snapshot_provider_bitmap.h"
@@ -202,6 +206,51 @@ unsigned WebGLRenderingContextBase::max_active_webgl_contexts_ = 0;
 unsigned WebGLRenderingContextBase::max_active_webgl_contexts_on_worker_ = 0;
 
 namespace {
+
+ExecutionContext* PrivacyWebGlExecutionContext(
+    CanvasRenderingContextHost* host) {
+  return host ? host->GetTopExecutionContext() : nullptr;
+}
+
+std::string PrivacyWebGlTopLevelSite(CanvasRenderingContextHost* host) {
+  return PrivacyCanvasTopLevelSite(PrivacyWebGlExecutionContext(host));
+}
+
+privacy_cef::PrivacyAuditContext PrivacyWebGlAudit(
+    CanvasRenderingContextHost* host,
+    const char* api) {
+  return PrivacyWebGlAuditContext(PrivacyWebGlExecutionContext(host), api);
+}
+
+std::string PrivacyWebGlDecision() {
+  switch (privacy_cef::PrivacyRuntime::GetInstance().GetWebGlMode()) {
+    case privacy_cef::WebGlMode::kOff:
+      return "off";
+    case privacy_cef::WebGlMode::kStandardize:
+      return "standardized";
+    case privacy_cef::WebGlMode::kStandardizeAndFarble:
+      return "farbled";
+    case privacy_cef::WebGlMode::kBlock:
+      return "blocked";
+  }
+}
+
+ScriptObject CreatePrivacyFakeExtension(
+    ScriptState* script_state,
+    const PrivacyWebGLFakeExtension& extension) {
+  v8::Isolate* isolate = script_state->GetIsolate();
+  v8::Local<v8::Context> context = script_state->GetContext();
+  v8::Local<v8::FunctionTemplate> tmpl = v8::FunctionTemplate::New(isolate);
+  tmpl->SetClassName(V8String(isolate, extension.script_object_name));
+  tmpl->PrototypeTemplate()->Set(
+      v8::Symbol::GetToStringTag(isolate),
+      V8String(isolate, extension.script_object_name),
+      static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontEnum));
+  v8::Local<v8::Object> object =
+      tmpl->GetFunction(context).ToLocalChecked()->NewInstance(context)
+          .ToLocalChecked();
+  return ScriptObject(isolate, object);
+}
 
 enum class WebGLANGLEImplementation {
   // These values are persisted to logs. Entries should not be renumbered and
@@ -3781,7 +3830,32 @@ ScriptObject WebGLRenderingContextBase::getExtension(ScriptState* script_state,
     UseCounter::Count(context, WebFeature::kWebGLDebugRendererInfo);
   }
 
+  const auto mode =
+      privacy_cef::PrivacyRuntime::GetInstance().GetWebGlMode();
+  if (mode == privacy_cef::WebGlMode::kBlock &&
+      name != WebGLDebugRendererInfo::ExtensionName()) {
+    privacy_cef::PrivacyRuntime::GetInstance().RecordWebGlAccess(
+        PrivacyWebGlTopLevelSite(Host()), "blocked",
+        PrivacyWebGlAudit(Host(), "WebGLRenderingContext.getExtension"));
+    return ScriptObject::CreateNull(script_state->GetIsolate());
+  }
+  if (mode == privacy_cef::WebGlMode::kStandardizeAndFarble) {
+    const size_t index =
+        privacy_cef::PrivacyRuntime::GetInstance().WebGlFakeExtensionIndex(
+            PrivacyWebGlTopLevelSite(Host()));
+    const auto& fake_extension = PrivacyWebGLExtensionHandler::Get(index);
+    if (EqualIgnoringAsciiCase(fake_extension.name, name)) {
+      privacy_cef::PrivacyRuntime::GetInstance().RecordWebGlAccess(
+          PrivacyWebGlTopLevelSite(Host()), "farbled",
+          PrivacyWebGlAudit(Host(), "WebGLRenderingContext.getExtension"));
+      return CreatePrivacyFakeExtension(script_state, fake_extension);
+    }
+  }
+
   WebGLExtension* extension = EnableExtensionIfSupported(name, context);
+  privacy_cef::PrivacyRuntime::GetInstance().RecordWebGlAccess(
+      PrivacyWebGlTopLevelSite(Host()), PrivacyWebGlDecision(),
+      PrivacyWebGlAudit(Host(), "WebGLRenderingContext.getExtension"));
   return ScriptObject(
       script_state->GetIsolate(),
       ToV8Traits<IDLNullable<WebGLExtension>>::ToV8(script_state, extension));
@@ -3892,6 +3966,9 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
                                                     GLenum pname) {
   if (isContextLost())
     return ScriptValue::CreateNull(script_state->GetIsolate());
+  privacy_cef::PrivacyRuntime::GetInstance().RecordWebGlAccess(
+      PrivacyWebGlTopLevelSite(Host()), PrivacyWebGlDecision(),
+      PrivacyWebGlAudit(Host(), "WebGLRenderingContext.getParameter"));
   const int kIntZero = 0;
   switch (pname) {
     case GL_ACTIVE_TEXTURE:
@@ -4101,6 +4178,18 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
       return ScriptValue::CreateNull(script_state->GetIsolate());
     case WebGLDebugRendererInfo::kUnmaskedRendererWebgl:
       if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
+        const std::string blocked =
+            privacy_cef::PrivacyRuntime::GetInstance().WebGlRandomString(
+                PrivacyWebGlTopLevelSite(Host()), "UNMASKED_RENDERER_WEBGL", 8);
+        if (!blocked.empty()) {
+          return WebGLAny(script_state, String::FromUtf8(blocked));
+        }
+        const std::string standardized =
+            privacy_cef::PrivacyRuntime::GetInstance().WebGlDebugString(
+                PrivacyWebGlTopLevelSite(Host()));
+        if (!standardized.empty()) {
+          return WebGLAny(script_state, String::FromUtf8(standardized));
+        }
         return WebGLAny(script_state,
                         String(ContextGL()->GetString(GL_RENDERER)));
       }
@@ -4110,6 +4199,18 @@ ScriptValue WebGLRenderingContextBase::getParameter(ScriptState* script_state,
       return ScriptValue::CreateNull(script_state->GetIsolate());
     case WebGLDebugRendererInfo::kUnmaskedVendorWebgl:
       if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
+        const std::string blocked =
+            privacy_cef::PrivacyRuntime::GetInstance().WebGlRandomString(
+                PrivacyWebGlTopLevelSite(Host()), "UNMASKED_VENDOR_WEBGL", 8);
+        if (!blocked.empty()) {
+          return WebGLAny(script_state, String::FromUtf8(blocked));
+        }
+        const std::string standardized =
+            privacy_cef::PrivacyRuntime::GetInstance().WebGlDebugString(
+                PrivacyWebGlTopLevelSite(Host()));
+        if (!standardized.empty()) {
+          return WebGLAny(script_state, String::FromUtf8(standardized));
+        }
         return WebGLAny(script_state,
                         String(ContextGL()->GetString(GL_VENDOR)));
       }
@@ -4411,6 +4512,24 @@ WebGLShaderPrecisionFormat* WebGLRenderingContextBase::getShaderPrecisionFormat(
   GLint precision = 0;
   ContextGL()->GetShaderPrecisionFormat(shader_type, precision_type, range,
                                         &precision);
+  if (privacy_cef::PrivacyRuntime::GetInstance().GetWebGlMode() ==
+      privacy_cef::WebGlMode::kBlock) {
+    // Brave Maximum mode suppresses shader precision information.
+    range[0] = 0;
+    range[1] = 0;
+    precision = 0;
+  }
+  privacy_cef::PrivacyRuntime::GetInstance().RecordWebGlAccess(
+      PrivacyWebGlTopLevelSite(Host()),
+      privacy_cef::PrivacyRuntime::GetInstance().GetWebGlMode() ==
+              privacy_cef::WebGlMode::kBlock
+          ? "blocked"
+          : privacy_cef::PrivacyRuntime::GetInstance().GetWebGlMode() ==
+                    privacy_cef::WebGlMode::kOff
+                ? "off"
+                : "native-balanced",
+      PrivacyWebGlAudit(Host(),
+                        "WebGLRenderingContext.getShaderPrecisionFormat"));
   return MakeGarbageCollected<WebGLShaderPrecisionFormat>(range[0], range[1],
                                                           precision);
 }
@@ -4434,6 +4553,21 @@ WebGLRenderingContextBase::getSupportedExtensions() {
     }
   }
 
+  const auto mode =
+      privacy_cef::PrivacyRuntime::GetInstance().GetWebGlMode();
+  if (mode == privacy_cef::WebGlMode::kBlock) {
+    result.clear();
+    result.push_back(WebGLDebugRendererInfo::ExtensionName());
+  } else if (mode == privacy_cef::WebGlMode::kStandardizeAndFarble) {
+    const size_t index =
+        privacy_cef::PrivacyRuntime::GetInstance().WebGlFakeExtensionIndex(
+            PrivacyWebGlTopLevelSite(Host()));
+    result.push_back(PrivacyWebGLExtensionHandler::Get(index).name);
+  }
+  privacy_cef::PrivacyRuntime::GetInstance().RecordWebGlAccess(
+      PrivacyWebGlTopLevelSite(Host()), PrivacyWebGlDecision(),
+      PrivacyWebGlAudit(Host(),
+                        "WebGLRenderingContext.getSupportedExtensions"));
   return result;
 }
 
@@ -5192,6 +5326,14 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
                                                  int64_t offset) {
   if (isContextLost())
     return;
+  if (privacy_cef::PrivacyRuntime::GetInstance().GetWebGlMode() ==
+      privacy_cef::WebGlMode::kBlock) {
+    // Brave Maximum mode returns before reading pixels.
+    privacy_cef::PrivacyRuntime::GetInstance().RecordWebGlAccess(
+        PrivacyWebGlTopLevelSite(Host()), "blocked",
+        PrivacyWebGlAudit(Host(), "WebGLRenderingContext.readPixels"));
+    return;
+  }
   // Due to WebGL's same-origin restrictions, it is not possible to
   // taint the origin using the WebGL API.
   DCHECK(Host()->OriginClean());
@@ -5257,6 +5399,10 @@ void WebGLRenderingContextBase::ReadPixelsHelper(GLint x,
     }
     ContextGL()->ReadPixels(x, y, width, height, format, type, data);
   }
+
+  privacy_cef::PrivacyRuntime::GetInstance().ProtectWebGlPixels(
+      PrivacyWebGlTopLevelSite(Host()), {},
+      PrivacyWebGlAudit(Host(), "WebGLRenderingContext.readPixels"));
 }
 
 void WebGLRenderingContextBase::RenderbufferStorageImpl(

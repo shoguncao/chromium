@@ -23,7 +23,14 @@ enum class CanvasProtectionResult {
   kFarbled,
 };
 
-struct CanvasAuditContext {
+enum class WebGlProtectionResult {
+  kRuntimeNotConfigured,
+  kDisabled,
+  kStandardized,
+  kFarbled,
+};
+
+struct PrivacyAuditContext {
   std::string api;
   std::string context_type;
   std::string frame_id;
@@ -50,7 +57,28 @@ class PrivacyRuntime {
   CanvasProtectionResult ProtectCanvasPixels(
       std::string_view top_level_site,
       base::span<uint8_t> rgba_pixels,
-      CanvasAuditContext audit_context = {}) const;
+      PrivacyAuditContext audit_context = {}) const;
+
+  WebGlMode GetWebGlMode() const;
+  std::string WebGlDebugString(std::string_view top_level_site,
+                               PrivacyAuditContext audit_context = {}) const;
+  std::string WebGlRandomString(std::string_view top_level_site,
+                                std::string_view seed_label,
+                                size_t length,
+                                PrivacyAuditContext audit_context = {}) const;
+  size_t WebGlFakeExtensionIndex(std::string_view top_level_site,
+                                 PrivacyAuditContext audit_context = {}) const;
+  int64_t FarbleWebGlInteger(std::string_view top_level_site,
+                             int64_t value,
+                             int discard,
+                             PrivacyAuditContext audit_context = {}) const;
+  WebGlProtectionResult ProtectWebGlPixels(
+      std::string_view top_level_site,
+      base::span<uint8_t> rgba_pixels,
+      PrivacyAuditContext audit_context = {}) const;
+  void RecordWebGlAccess(std::string_view top_level_site,
+                         std::string policy_decision,
+                         PrivacyAuditContext audit_context) const;
 
   void ResetForTesting();
 
@@ -62,6 +90,12 @@ class PrivacyRuntime {
 
   class State;
   State& state() const;
+  void PostAuditEvent(const PrivacyProfile& profile,
+                      std::string category,
+                      int algorithm_version,
+                      std::string policy_decision,
+                      PrivacyAuditContext audit_context,
+                      std::string_view top_level_site) const;
 };
 
 }  // namespace privacy_cef

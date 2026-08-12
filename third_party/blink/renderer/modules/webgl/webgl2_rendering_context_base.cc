@@ -10,6 +10,7 @@
 #include "base/containers/heap_array.h"
 #include "base/numerics/checked_math.h"
 #include "base/numerics/safe_conversions.h"
+#include "components/privacy_cef/privacy_runtime.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
 #include "third_party/blink/renderer/bindings/modules/v8/webgl_any.h"
@@ -17,6 +18,7 @@
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
+#include "third_party/blink/renderer/core/html/canvas/privacy_canvas_context.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/media/html_video_element.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
@@ -110,6 +112,51 @@ namespace blink {
 namespace {
 
 const GLuint64 kMaxClientWaitTimeout = 0u;
+
+std::string PrivacyWebGl2TopLevelSite(
+    WebGL2RenderingContextBase* context) {
+  return PrivacyCanvasTopLevelSite(
+      context->Host() ? context->Host()->GetTopExecutionContext() : nullptr);
+}
+
+privacy_cef::PrivacyAuditContext PrivacyWebGl2Audit(
+    WebGL2RenderingContextBase* context,
+    const char* api) {
+  return PrivacyWebGlAuditContext(
+      context->Host() ? context->Host()->GetTopExecutionContext() : nullptr,
+      api);
+}
+
+std::optional<int> PrivacyWebGl2FarblingDiscard(GLenum pname) {
+  switch (pname) {
+    case GL_MAX_VERTEX_UNIFORM_COMPONENTS:
+      return 1;
+    case GL_MAX_VERTEX_UNIFORM_BLOCKS:
+      return 2;
+    case GL_MAX_VERTEX_OUTPUT_COMPONENTS:
+      return 3;
+    case GL_MAX_VARYING_COMPONENTS:
+      return 4;
+    case GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS:
+      return 5;
+    case GL_MAX_FRAGMENT_UNIFORM_COMPONENTS:
+      return 6;
+    case GL_MAX_FRAGMENT_UNIFORM_BLOCKS:
+      return 7;
+    case GL_MAX_FRAGMENT_INPUT_COMPONENTS:
+      return 8;
+    case GL_MAX_UNIFORM_BUFFER_BINDINGS:
+      return 9;
+    case GL_MAX_COMBINED_UNIFORM_BLOCKS:
+      return 10;
+    case GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS:
+      return 11;
+    case GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS:
+      return 12;
+    default:
+      return std::nullopt;
+  }
+}
 
 // TODO(kainino): Change outByteLength to GLuint and change the associated
 // range checking (and all uses) - overflow becomes possible in cases below
@@ -4774,6 +4821,43 @@ ScriptValue WebGL2RenderingContextBase::getParameter(ScriptState* script_state,
                                                      GLenum pname) {
   if (isContextLost())
     return ScriptValue::CreateNull(script_state->GetIsolate());
+  if (const std::optional<int> discard =
+          PrivacyWebGl2FarblingDiscard(pname)) {
+    if (privacy_cef::PrivacyRuntime::GetInstance().GetWebGlMode() ==
+        privacy_cef::WebGlMode::kBlock) {
+      privacy_cef::PrivacyRuntime::GetInstance().RecordWebGlAccess(
+          PrivacyWebGl2TopLevelSite(this), "blocked",
+          PrivacyWebGl2Audit(this, "WebGL2RenderingContext.getParameter"));
+      return ScriptValue::CreateNull(script_state->GetIsolate());
+    }
+    GLint64 value = 0;
+    if (pname == GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS ||
+        pname == GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS) {
+      ContextGL()->GetInteger64v(pname, &value);
+    } else {
+      GLint int_value = 0;
+      ContextGL()->GetIntegerv(pname, &int_value);
+      value = int_value;
+    }
+    const int64_t farbled =
+        privacy_cef::PrivacyRuntime::GetInstance().FarbleWebGlInteger(
+            PrivacyWebGl2TopLevelSite(this), value, *discard,
+            PrivacyWebGl2Audit(this, "WebGL2RenderingContext.getParameter"));
+    return WebGLAny(script_state, farbled);
+  }
+  privacy_cef::PrivacyRuntime::GetInstance().RecordWebGlAccess(
+      PrivacyWebGl2TopLevelSite(this),
+      privacy_cef::PrivacyRuntime::GetInstance().GetWebGlMode() ==
+              privacy_cef::WebGlMode::kBlock
+          ? "blocked"
+          : privacy_cef::PrivacyRuntime::GetInstance().GetWebGlMode() ==
+                    privacy_cef::WebGlMode::kStandardizeAndFarble
+                ? "native-balanced"
+                : privacy_cef::PrivacyRuntime::GetInstance().GetWebGlMode() ==
+                          privacy_cef::WebGlMode::kStandardize
+                      ? "standardized"
+                      : "off",
+      PrivacyWebGl2Audit(this, "WebGL2RenderingContext.getParameter"));
   switch (pname) {
     case GL_SHADING_LANGUAGE_VERSION: {
       return WebGLAny(

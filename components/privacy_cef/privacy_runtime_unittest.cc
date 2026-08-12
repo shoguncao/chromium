@@ -23,6 +23,12 @@ PrivacyProfile FarblingProfile() {
   return profile;
 }
 
+PrivacyProfile WebGlFarblingProfile() {
+  PrivacyProfile profile = FarblingProfile();
+  profile.webgl_mode = WebGlMode::kStandardizeAndFarble;
+  return profile;
+}
+
 class PrivacyRuntimeTest : public testing::Test {
  protected:
   void TearDown() override { PrivacyRuntime::GetInstance().ResetForTesting(); }
@@ -61,6 +67,43 @@ TEST_F(PrivacyRuntimeTest, SeparatesTopLevelSites) {
   PrivacyRuntime::GetInstance().ProtectCanvasPixels("example.com", first);
   PrivacyRuntime::GetInstance().ProtectCanvasPixels("github.com", second);
   EXPECT_NE(first, second);
+}
+
+TEST_F(PrivacyRuntimeTest, StandardizesWebGlDebugStringsLikeBraveBalanced) {
+  PrivacyRuntime::GetInstance().SetProfile(WebGlFarblingProfile());
+  EXPECT_EQ(PrivacyRuntime::GetInstance().WebGlDebugString("example.com"),
+            "Brave");
+}
+
+TEST_F(PrivacyRuntimeTest, WebGlExtensionSelectionIsStableAndSitePartitioned) {
+  PrivacyRuntime::GetInstance().SetProfile(WebGlFarblingProfile());
+  const size_t first =
+      PrivacyRuntime::GetInstance().WebGlFakeExtensionIndex("example.com");
+  EXPECT_EQ(first, PrivacyRuntime::GetInstance().WebGlFakeExtensionIndex(
+                       "example.com"));
+  EXPECT_NE(first, PrivacyRuntime::GetInstance().WebGlFakeExtensionIndex(
+                       "github.com"));
+}
+
+TEST_F(PrivacyRuntimeTest, WebGlIntegerFarblingMatchesBraveBounds) {
+  PrivacyRuntime::GetInstance().SetProfile(WebGlFarblingProfile());
+  for (int discard = 1; discard <= 12; ++discard) {
+    const int64_t value = PrivacyRuntime::GetInstance().FarbleWebGlInteger(
+        "example.com", 1024, discard);
+    EXPECT_TRUE(value == 1024 || value == 1023);
+    EXPECT_EQ(value, PrivacyRuntime::GetInstance().FarbleWebGlInteger(
+                         "example.com", 1024, discard));
+  }
+}
+
+TEST_F(PrivacyRuntimeTest, BraveBalancedWebGlReadPixelsRemainsNative) {
+  PrivacyRuntime::GetInstance().SetProfile(WebGlFarblingProfile());
+  std::array<uint8_t, 8> pixels = {10, 20, 30, 255, 40, 50, 60, 255};
+  const auto original = pixels;
+  EXPECT_EQ(
+      PrivacyRuntime::GetInstance().ProtectWebGlPixels("example.com", pixels),
+      WebGlProtectionResult::kStandardized);
+  EXPECT_EQ(pixels, original);
 }
 
 }  // namespace
