@@ -41,6 +41,14 @@ TEST(PrivacyProfileTest, ParsesValidProfile) {
   EXPECT_EQ(profile->canvas_mode, CanvasMode::kFarble);
   EXPECT_EQ(profile->canvas_algorithm_version, 1);
   EXPECT_EQ(profile->audit_mode, AuditMode::kSummary);
+  EXPECT_EQ(profile->webgl_mode, WebGlMode::kStandardizeAndFarble);
+  EXPECT_EQ(profile->audio_mode, AudioMode::kFarble);
+  EXPECT_EQ(profile->fonts_mode, FontsMode::kStandardize);
+  EXPECT_EQ(profile->geometry_mode, GeometryMode::kEnvironmentOnly);
+  EXPECT_EQ(profile->storage_mode, StorageMode::kBucket);
+  EXPECT_EQ(profile->speech_mode, SpeechMode::kStandardize);
+  EXPECT_EQ(profile->webrtc_mode, WebRtcMode::kNoLocalIp);
+  EXPECT_EQ(profile->webgpu_mode, WebGpuMode::kDisabled);
 }
 
 TEST(PrivacyProfileTest, RejectsSeedWithWrongSize) {
@@ -78,6 +86,26 @@ TEST(PrivacyProfileTest, RendererPayloadRoundTripsThroughValidation) {
   EXPECT_EQ(round_trip->canvas_mode, profile->canvas_mode);
   EXPECT_EQ(round_trip->canvas_algorithm, profile->canvas_algorithm);
   EXPECT_EQ(round_trip->languages, profile->languages);
+  EXPECT_EQ(round_trip->webgl_mode, profile->webgl_mode);
+  EXPECT_EQ(round_trip->audio_mode, profile->audio_mode);
+  EXPECT_EQ(round_trip->fonts_mode, profile->fonts_mode);
+  EXPECT_EQ(round_trip->geometry_mode, profile->geometry_mode);
+  EXPECT_EQ(round_trip->storage_mode, profile->storage_mode);
+  EXPECT_EQ(round_trip->speech_mode, profile->speech_mode);
+  EXPECT_EQ(round_trip->webrtc_mode, profile->webrtc_mode);
+  EXPECT_EQ(round_trip->webgpu_mode, profile->webgpu_mode);
+}
+
+TEST(PrivacyProfileTest, RejectsUnknownWebGlMode) {
+  std::string json = kValidProfile;
+  constexpr std::string_view kWebGlMode =
+      "\"webgl\":\"standardize-and-farble\"";
+  const size_t mode = json.find(kWebGlMode);
+  ASSERT_NE(mode, std::string::npos);
+  json.replace(mode, kWebGlMode.size(), "\"webgl\":\"invented\"");
+  std::string error;
+  EXPECT_FALSE(PrivacyProfile::Parse(json, &error));
+  EXPECT_EQ(error, "unsupported WebGL mode");
 }
 
 }  // namespace privacy_cef

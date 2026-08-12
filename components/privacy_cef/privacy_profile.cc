@@ -55,6 +55,90 @@ std::optional<int> RequiredInt(const base::DictValue& parent,
   return value;
 }
 
+std::string_view ToString(WebGlMode mode) {
+  switch (mode) {
+    case WebGlMode::kOff:
+      return "off";
+    case WebGlMode::kStandardize:
+      return "standardize";
+    case WebGlMode::kStandardizeAndFarble:
+      return "standardize-and-farble";
+    case WebGlMode::kBlock:
+      return "block";
+  }
+}
+
+std::string_view ToString(AudioMode mode) {
+  switch (mode) {
+    case AudioMode::kOff:
+      return "off";
+    case AudioMode::kFarble:
+      return "farble";
+    case AudioMode::kBlock:
+      return "block";
+  }
+}
+
+std::string_view ToString(FontsMode mode) {
+  switch (mode) {
+    case FontsMode::kOff:
+      return "off";
+    case FontsMode::kStandardize:
+      return "standardize";
+  }
+}
+
+std::string_view ToString(GeometryMode mode) {
+  switch (mode) {
+    case GeometryMode::kOff:
+      return "off";
+    case GeometryMode::kEnvironmentOnly:
+      return "environment-only";
+  }
+}
+
+std::string_view ToString(StorageMode mode) {
+  switch (mode) {
+    case StorageMode::kOff:
+      return "off";
+    case StorageMode::kBucket:
+      return "bucket";
+  }
+}
+
+std::string_view ToString(SpeechMode mode) {
+  switch (mode) {
+    case SpeechMode::kOff:
+      return "off";
+    case SpeechMode::kStandardize:
+      return "standardize";
+    case SpeechMode::kBlock:
+      return "block";
+  }
+}
+
+std::string_view ToString(WebRtcMode mode) {
+  switch (mode) {
+    case WebRtcMode::kOff:
+      return "off";
+    case WebRtcMode::kNoLocalIp:
+      return "no-local-ip";
+    case WebRtcMode::kBlock:
+      return "block";
+  }
+}
+
+std::string_view ToString(WebGpuMode mode) {
+  switch (mode) {
+    case WebGpuMode::kOff:
+      return "off";
+    case WebGpuMode::kStandardize:
+      return "standardize";
+    case WebGpuMode::kDisabled:
+      return "disabled";
+  }
+}
+
 }  // namespace
 
 PrivacyProfile::PrivacyProfile() = default;
@@ -120,6 +204,14 @@ std::string PrivacyProfile::SerializeForRenderer() const {
   canvas.Set("algorithmVersion", canvas_algorithm_version);
   base::DictValue protections;
   protections.Set("canvas", std::move(canvas));
+  protections.Set("webgl", ToString(webgl_mode));
+  protections.Set("audio", ToString(audio_mode));
+  protections.Set("fonts", ToString(fonts_mode));
+  protections.Set("geometry", ToString(geometry_mode));
+  protections.Set("storage", ToString(storage_mode));
+  protections.Set("speech", ToString(speech_mode));
+  protections.Set("webrtc", ToString(webrtc_mode));
+  protections.Set("webgpu", ToString(webgpu_mode));
 
   base::DictValue root;
   root.Set("schemaVersion", schema_version);
@@ -212,10 +304,28 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
       RequiredString(*canvas, "algorithm", error);
   std::optional<int> canvas_version =
       RequiredInt(*canvas, "algorithmVersion", error);
+  const std::string* webgl_mode =
+      RequiredString(*protections, "webgl", error);
+  const std::string* audio_mode =
+      RequiredString(*protections, "audio", error);
+  const std::string* fonts_mode =
+      RequiredString(*protections, "fonts", error);
+  const std::string* geometry_mode =
+      RequiredString(*protections, "geometry", error);
+  const std::string* storage_mode =
+      RequiredString(*protections, "storage", error);
+  const std::string* speech_mode =
+      RequiredString(*protections, "speech", error);
+  const std::string* webrtc_mode =
+      RequiredString(*protections, "webrtc", error);
+  const std::string* webgpu_mode =
+      RequiredString(*protections, "webgpu", error);
   if (!language || !languages || languages->empty() || !timezone ||
       !cpu_cores || !memory_gb || !width || !height || !scale || !depth ||
       !gamut || !audit_mode || !retention || !max_size || !canvas_mode ||
-      !canvas_algorithm || !canvas_version) {
+      !canvas_algorithm || !canvas_version || !webgl_mode || !audio_mode ||
+      !fonts_mode || !geometry_mode || !storage_mode || !speech_mode ||
+      !webrtc_mode || !webgpu_mode) {
     return std::nullopt;
   }
 
@@ -249,6 +359,82 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
   if (profile.canvas_mode == CanvasMode::kFarble &&
       (*canvas_algorithm != "brave-derived" || *canvas_version != 1)) {
     Fail("unsupported Canvas farbling algorithm", error);
+    return std::nullopt;
+  }
+  if (*webgl_mode == "off") {
+    profile.webgl_mode = WebGlMode::kOff;
+  } else if (*webgl_mode == "standardize") {
+    profile.webgl_mode = WebGlMode::kStandardize;
+  } else if (*webgl_mode == "standardize-and-farble") {
+    profile.webgl_mode = WebGlMode::kStandardizeAndFarble;
+  } else if (*webgl_mode == "block") {
+    profile.webgl_mode = WebGlMode::kBlock;
+  } else {
+    Fail("unsupported WebGL mode", error);
+    return std::nullopt;
+  }
+  if (*audio_mode == "off") {
+    profile.audio_mode = AudioMode::kOff;
+  } else if (*audio_mode == "farble") {
+    profile.audio_mode = AudioMode::kFarble;
+  } else if (*audio_mode == "block") {
+    profile.audio_mode = AudioMode::kBlock;
+  } else {
+    Fail("unsupported Web Audio mode", error);
+    return std::nullopt;
+  }
+  if (*fonts_mode == "off") {
+    profile.fonts_mode = FontsMode::kOff;
+  } else if (*fonts_mode == "standardize") {
+    profile.fonts_mode = FontsMode::kStandardize;
+  } else {
+    Fail("unsupported Fonts mode", error);
+    return std::nullopt;
+  }
+  if (*geometry_mode == "off") {
+    profile.geometry_mode = GeometryMode::kOff;
+  } else if (*geometry_mode == "environment-only") {
+    profile.geometry_mode = GeometryMode::kEnvironmentOnly;
+  } else {
+    Fail("unsupported Geometry mode", error);
+    return std::nullopt;
+  }
+  if (*storage_mode == "off") {
+    profile.storage_mode = StorageMode::kOff;
+  } else if (*storage_mode == "bucket") {
+    profile.storage_mode = StorageMode::kBucket;
+  } else {
+    Fail("unsupported Storage mode", error);
+    return std::nullopt;
+  }
+  if (*speech_mode == "off") {
+    profile.speech_mode = SpeechMode::kOff;
+  } else if (*speech_mode == "standardize") {
+    profile.speech_mode = SpeechMode::kStandardize;
+  } else if (*speech_mode == "block") {
+    profile.speech_mode = SpeechMode::kBlock;
+  } else {
+    Fail("unsupported Speech mode", error);
+    return std::nullopt;
+  }
+  if (*webrtc_mode == "off") {
+    profile.webrtc_mode = WebRtcMode::kOff;
+  } else if (*webrtc_mode == "no-local-ip") {
+    profile.webrtc_mode = WebRtcMode::kNoLocalIp;
+  } else if (*webrtc_mode == "block") {
+    profile.webrtc_mode = WebRtcMode::kBlock;
+  } else {
+    Fail("unsupported WebRTC mode", error);
+    return std::nullopt;
+  }
+  if (*webgpu_mode == "off") {
+    profile.webgpu_mode = WebGpuMode::kOff;
+  } else if (*webgpu_mode == "standardize") {
+    profile.webgpu_mode = WebGpuMode::kStandardize;
+  } else if (*webgpu_mode == "disabled") {
+    profile.webgpu_mode = WebGpuMode::kDisabled;
+  } else {
+    Fail("unsupported WebGPU mode", error);
     return std::nullopt;
   }
 

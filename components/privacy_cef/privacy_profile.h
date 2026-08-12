@@ -17,6 +17,14 @@ namespace privacy_cef {
 
 enum class AuditMode { kOff, kSummary, kFull };
 enum class CanvasMode { kOff, kFarble, kBlock };
+enum class WebGlMode { kOff, kStandardize, kStandardizeAndFarble, kBlock };
+enum class AudioMode { kOff, kFarble, kBlock };
+enum class FontsMode { kOff, kStandardize };
+enum class GeometryMode { kOff, kEnvironmentOnly };
+enum class StorageMode { kOff, kBucket };
+enum class SpeechMode { kOff, kStandardize, kBlock };
+enum class WebRtcMode { kOff, kNoLocalIp, kBlock };
+enum class WebGpuMode { kOff, kStandardize, kDisabled };
 
 struct PrivacyProfile {
   static constexpr int kSupportedSchemaVersion = 1;
@@ -50,6 +58,14 @@ struct PrivacyProfile {
   CanvasMode canvas_mode = CanvasMode::kOff;
   std::string canvas_algorithm;
   int canvas_algorithm_version = 0;
+  WebGlMode webgl_mode = WebGlMode::kOff;
+  AudioMode audio_mode = AudioMode::kOff;
+  FontsMode fonts_mode = FontsMode::kOff;
+  GeometryMode geometry_mode = GeometryMode::kOff;
+  StorageMode storage_mode = StorageMode::kOff;
+  SpeechMode speech_mode = SpeechMode::kOff;
+  WebRtcMode webrtc_mode = WebRtcMode::kOff;
+  WebGpuMode webgpu_mode = WebGpuMode::kOff;
 
   static std::optional<PrivacyProfile> LoadFromFile(const base::FilePath& path,
                                                     std::string* error);
