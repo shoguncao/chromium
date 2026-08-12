@@ -6,7 +6,10 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_HTML_CANVAS_PRIVACY_CANVAS_CONTEXT_H_
 
 #include <string>
+#include <utility>
 
+#include "base/strings/string_number_conversions.h"
+#include "base/threading/platform_thread.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
@@ -42,6 +45,30 @@ inline std::string PrivacyCanvasTopLevelSite(ExecutionContext* context) {
     return {};
   }
   return BlinkSchemefulSite(origin->IsolatedCopy()).Serialize().Utf8();
+}
+
+inline privacy_cef::CanvasAuditContext PrivacyCanvasAuditContext(
+    ExecutionContext* context,
+    std::string api) {
+  privacy_cef::CanvasAuditContext audit;
+  audit.api = std::move(api);
+  if (!context) {
+    return audit;
+  }
+  audit.context_type =
+      DynamicTo<WorkerGlobalScope>(context) ? "worker" : "frame";
+  if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
+    if (LocalFrame* frame = window->GetFrame()) {
+      audit.frame_id = frame->GetDevToolsFrameToken().ToString();
+    }
+  } else if (DynamicTo<WorkerGlobalScope>(context)) {
+    audit.worker_id =
+        base::NumberToString(base::PlatformThread::CurrentId().raw());
+  }
+  if (const SecurityOrigin* origin = context->GetSecurityOrigin()) {
+    audit.frame_origin = origin->ToString().Utf8();
+  }
+  return audit;
 }
 
 }  // namespace blink

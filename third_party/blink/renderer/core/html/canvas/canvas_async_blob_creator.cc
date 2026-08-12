@@ -222,7 +222,12 @@ CanvasAsyncBlobCreator::CanvasAsyncBlobCreator(
         // Brave's input-dependent result without mutating the source Canvas.
         privacy_cef::PrivacyRuntime::GetInstance().ProtectCanvasPixels(
             PrivacyCanvasTopLevelSite(context_.Get()),
-            gfx::SkPixmapToWritableSpan(src_data_));
+            gfx::SkPixmapToWritableSpan(src_data_),
+            PrivacyCanvasAuditContext(
+                context_.Get(),
+                function_type_ == kHTMLCanvasToBlobCallback
+                    ? "HTMLCanvasElement.toBlob"
+                    : "OffscreenCanvas.convertToBlob"));
       }
     }
   }
