@@ -60,8 +60,11 @@ class PLATFORM_EXPORT ImageDataBuffer {
   base::span<const uint8_t> PixelData() const;
 
   // Required by privacy farbling before encoded Canvas data leaves Blink.
-  // Brave Core exposes the same SkPixmap at commit
-  // 66867f5c43390a235672bfc3e091d02e84d6892c.
+  // Brave Core exposes a writable SkPixmap at commit
+  // 66867f5c43390a235672bfc3e091d02e84d6892c. Ensure that our writable
+  // storage is private first so repeated reads never mutate the backing
+  // Canvas image.
+  bool MakePrivateCopyForPrivacy();
   SkPixmap MutablePixmapForPrivacy() { return pixmap_; }
 
  private:

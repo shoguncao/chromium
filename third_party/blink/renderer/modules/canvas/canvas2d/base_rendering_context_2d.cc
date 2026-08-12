@@ -56,6 +56,7 @@
 #include "third_party/blink/renderer/core/html/canvas/element_image.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
+#include "third_party/blink/renderer/core/html/canvas/privacy_canvas_context.h"
 #include "third_party/blink/renderer/core/html/canvas/text_cluster.h"
 #include "third_party/blink/renderer/core/html/canvas/text_metrics.h"
 #include "third_party/blink/renderer/core/html/canvas/unique_font_selector.h"
@@ -527,7 +528,7 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
   if (ExecutionContext* context = GetTopExecutionContext()) {
     SkPixmap image_data_pixmap = image_data->GetSkPixmap();
     privacy_cef::PrivacyRuntime::GetInstance().ProtectCanvasPixels(
-        context->GetSecurityOrigin()->ToString().Utf8(),
+        PrivacyCanvasTopLevelSite(context),
         gfx::SkPixmapToWritableSpan(image_data_pixmap));
   }
 

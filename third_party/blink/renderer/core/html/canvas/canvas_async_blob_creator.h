@@ -96,6 +96,7 @@ class CORE_EXPORT CanvasAsyncBlobCreator
 
   scoped_refptr<StaticBitmapImage> image_;
   Member<ExecutionContext> context_;
+  std::unique_ptr<ImageDataBuffer> privacy_image_data_;
 
   // The following members are used for progressive/idle encoding,
   // see comment above the implementation of ScheduleAsyncBlobCreation.
