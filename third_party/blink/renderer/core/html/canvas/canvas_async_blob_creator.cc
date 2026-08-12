@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fileapi/blob.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
+#include "third_party/blink/renderer/core/html/canvas/privacy_canvas_context.h"
 #include "third_party/blink/renderer/platform/graphics/image_data_buffer.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
@@ -211,11 +212,18 @@ CanvasAsyncBlobCreator::CanvasAsyncBlobCreator(
         src_data_.reset(info, src_data_.addr(), src_data_.rowBytes());
       }
 
-      // Ported from Brave Core's CanvasAsyncBlobCreator hook at commit
-      // 66867f5c43390a235672bfc3e091d02e84d6892c.
-      privacy_cef::PrivacyRuntime::GetInstance().ProtectCanvasPixels(
-          context_->GetSecurityOrigin()->ToString().Utf8(),
-          gfx::SkPixmapToWritableSpan(src_data_));
+      privacy_image_data_ = ImageDataBuffer::Create(src_data_);
+      if (privacy_image_data_ &&
+          privacy_image_data_->MakePrivateCopyForPrivacy()) {
+        src_data_ = privacy_image_data_->MutablePixmapForPrivacy();
+
+        // Ported from Brave Core's CanvasAsyncBlobCreator hook at commit
+        // 66867f5c43390a235672bfc3e091d02e84d6892c. The private copy preserves
+        // Brave's input-dependent result without mutating the source Canvas.
+        privacy_cef::PrivacyRuntime::GetInstance().ProtectCanvasPixels(
+            PrivacyCanvasTopLevelSite(context_.Get()),
+            gfx::SkPixmapToWritableSpan(src_data_));
+      }
     }
   }
 
@@ -237,6 +245,7 @@ void CanvasAsyncBlobCreator::Dispose() {
   script_promise_resolver_.Clear();
   image_ = nullptr;
   skia_image_ = nullptr;
+  privacy_image_data_.reset();
   encoded_image_.clear();
 }
 

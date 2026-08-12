@@ -127,6 +127,30 @@ base::span<const uint8_t> ImageDataBuffer::PixelData() const {
   return gfx::SkPixmapToSpan(pixmap_);
 }
 
+bool ImageDataBuffer::MakePrivateCopyForPrivacy() {
+  DCHECK(is_valid_);
+  const SkImageInfo info = pixmap_.info();
+  const size_t row_bytes = pixmap_.rowBytes();
+  const size_t size = info.computeByteSize(row_bytes);
+  if (SkImageInfo::ByteSizeOverflowed(size)) {
+    return false;
+  }
+
+  sk_sp<SkData> data = SkData::MakeUninitialized(size);
+  SkPixmap private_pixmap(info, data->writable_data(), row_bytes);
+  if (!pixmap_.readPixels(private_pixmap)) {
+    return false;
+  }
+
+  retained_image_ = SkImages::RasterFromData(info, std::move(data), row_bytes);
+  if (!retained_image_ || !retained_image_->peekPixels(&pixmap_)) {
+    pixmap_.reset();
+    is_valid_ = false;
+    return false;
+  }
+  return true;
+}
+
 bool ImageDataBuffer::EncodeImage(const ImageEncodingMimeType mime_type,
                                   const double& quality,
                                   Vector<unsigned char>* encoded_image) const {

@@ -84,6 +84,7 @@
 #include "third_party/blink/renderer/core/html/canvas/element_image.h"
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
 #include "third_party/blink/renderer/core/html/canvas/predefined_color_space.h"
+#include "third_party/blink/renderer/core/html/canvas/privacy_canvas_context.h"
 #include "third_party/blink/renderer/core/html/canvas/unique_font_selector.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_select_element.h"
@@ -1328,9 +1329,10 @@ String HTMLCanvasElement::ToDataURLInternal(
 
     // Ported from Brave Core's HTMLCanvasElement::ToDataURLInternal hook at
     // commit 66867f5c43390a235672bfc3e091d02e84d6892c.
-    if (ExecutionContext* context = GetExecutionContext()) {
+    if (ExecutionContext* context = GetExecutionContext();
+        context && data_buffer->MakePrivateCopyForPrivacy()) {
       privacy_cef::PrivacyRuntime::GetInstance().ProtectCanvasPixels(
-          context->GetSecurityOrigin()->ToString().Utf8(),
+          PrivacyCanvasTopLevelSite(context),
           gfx::SkPixmapToWritableSpan(
               data_buffer->MutablePixmapForPrivacy()));
     }
