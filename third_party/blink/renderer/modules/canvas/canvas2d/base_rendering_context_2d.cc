@@ -546,7 +546,9 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
     SkPixmap image_data_pixmap = image_data->GetSkPixmap();
     privacy_cef::PrivacyRuntime::GetInstance().ProtectCanvasPixels(
         PrivacyCanvasTopLevelSite(context),
-        gfx::SkPixmapToWritableSpan(image_data_pixmap));
+        gfx::SkPixmapToWritableSpan(image_data_pixmap),
+        PrivacyCanvasAuditContext(context,
+                                  "CanvasRenderingContext2D.getImageData"));
   }
 
   return image_data;

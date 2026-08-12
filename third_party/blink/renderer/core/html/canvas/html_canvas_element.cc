@@ -1334,7 +1334,8 @@ String HTMLCanvasElement::ToDataURLInternal(
       privacy_cef::PrivacyRuntime::GetInstance().ProtectCanvasPixels(
           PrivacyCanvasTopLevelSite(context),
           gfx::SkPixmapToWritableSpan(
-              data_buffer->MutablePixmapForPrivacy()));
+              data_buffer->MutablePixmapForPrivacy()),
+          PrivacyCanvasAuditContext(context, "HTMLCanvasElement.toDataURL"));
     }
 
     String data_url = data_buffer->ToDataURL(encoding_mime_type, quality);
