@@ -19,6 +19,7 @@ source_set("privacy_cef") {
   deps = [
     "//base",
     "//crypto",
+    "//third_party/abseil-cpp:absl",
   ]
 }
 

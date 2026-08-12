@@ -47,10 +47,10 @@ inline std::string PrivacyCanvasTopLevelSite(ExecutionContext* context) {
   return BlinkSchemefulSite(origin->IsolatedCopy()).Serialize().Utf8();
 }
 
-inline privacy_cef::CanvasAuditContext PrivacyCanvasAuditContext(
+inline privacy_cef::PrivacyAuditContext PrivacyExecutionAuditContext(
     ExecutionContext* context,
     std::string api) {
-  privacy_cef::CanvasAuditContext audit;
+  privacy_cef::PrivacyAuditContext audit;
   audit.api = std::move(api);
   if (!context) {
     return audit;
@@ -69,6 +69,18 @@ inline privacy_cef::CanvasAuditContext PrivacyCanvasAuditContext(
     audit.frame_origin = origin->ToString().Utf8();
   }
   return audit;
+}
+
+inline privacy_cef::PrivacyAuditContext PrivacyCanvasAuditContext(
+    ExecutionContext* context,
+    std::string api) {
+  return PrivacyExecutionAuditContext(context, std::move(api));
+}
+
+inline privacy_cef::PrivacyAuditContext PrivacyWebGlAuditContext(
+    ExecutionContext* context,
+    std::string api) {
+  return PrivacyExecutionAuditContext(context, std::move(api));
 }
 
 }  // namespace blink

@@ -9,13 +9,25 @@
 
 #include "base/functional/bind.h"
 #include "base/no_destructor.h"
+#include "base/numerics/byte_conversions.h"
 #include "base/process/process.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/platform_thread.h"
 #include "components/privacy_cef/canvas_farbling.h"
 #include "components/privacy_cef/privacy_seed.h"
+#include "crypto/hmac.h"
+#include "third_party/abseil-cpp/absl/random/random.h"
 
 namespace privacy_cef {
+namespace {
+
+uint64_t NextLfsrValue(uint64_t value) {
+  constexpr uint64_t kZero = 0;
+  return (value >> 1) |
+         (((value << 62) ^ (value << 61)) & (~(~kZero << 63) << 62));
+}
+
+}  // namespace
 
 class PrivacyRuntime::State {
  public:
@@ -60,18 +72,14 @@ bool PrivacyRuntime::IsConfigured() const {
 CanvasProtectionResult PrivacyRuntime::ProtectCanvasPixels(
     std::string_view top_level_site,
     base::span<uint8_t> rgba_pixels,
-    CanvasAuditContext audit_context) const {
+    PrivacyAuditContext audit_context) const {
   PrivacyProfile profile;
-  scoped_refptr<base::SequencedTaskRunner> audit_task_runner;
-  base::RepeatingCallback<void(PrivacyAuditEvent)> audit_callback;
   {
     base::AutoLock lock(state().lock);
     if (!state().profile) {
       return CanvasProtectionResult::kRuntimeNotConfigured;
     }
     profile = *state().profile;
-    audit_task_runner = state().audit_task_runner;
-    audit_callback = state().audit_callback;
   }
 
   CanvasProtectionResult result = CanvasProtectionResult::kDisabled;
@@ -83,29 +91,217 @@ CanvasProtectionResult PrivacyRuntime::ProtectCanvasPixels(
     result = CanvasProtectionResult::kFarbled;
   }
 
-  if (audit_task_runner && audit_callback && !audit_context.api.empty()) {
-    PrivacyAuditEvent event;
-    event.process_type = "renderer";
-    event.process_id = base::Process::Current().Pid();
-    event.thread_id =
-        base::PlatformThread::CurrentId().truncate_to_int32_for_display_only();
-    event.context_type = std::move(audit_context.context_type);
-    event.frame_id = std::move(audit_context.frame_id);
-    event.worker_id = std::move(audit_context.worker_id);
-    event.top_level_site = std::string(top_level_site);
-    event.frame_origin = std::move(audit_context.frame_origin);
-    event.category = "canvas";
-    event.api = std::move(audit_context.api);
-    event.profile_id = profile.profile_id;
-    event.algorithm_version = profile.canvas_algorithm_version;
-    event.policy_decision =
-        result == CanvasProtectionResult::kFarbled ? "farbled" : "off";
-    event.outcome = "success";
-    audit_task_runner->PostTask(
-        FROM_HERE, base::BindOnce(audit_callback, std::move(event)));
-  }
+  PostAuditEvent(profile, "canvas", profile.canvas_algorithm_version,
+                 result == CanvasProtectionResult::kFarbled ? "farbled" : "off",
+                 std::move(audit_context), top_level_site);
 
   return result;
+}
+
+WebGlMode PrivacyRuntime::GetWebGlMode() const {
+  base::AutoLock lock(state().lock);
+  return state().profile ? state().profile->webgl_mode : WebGlMode::kOff;
+}
+
+std::string PrivacyRuntime::WebGlDebugString(
+    std::string_view top_level_site,
+    PrivacyAuditContext audit_context) const {
+  PrivacyProfile profile;
+  {
+    base::AutoLock lock(state().lock);
+    if (!state().profile) {
+      return {};
+    }
+    profile = *state().profile;
+  }
+  const bool standardized =
+      profile.webgl_mode == WebGlMode::kStandardize ||
+      profile.webgl_mode == WebGlMode::kStandardizeAndFarble;
+  PostAuditEvent(profile, "webgl", 1, standardized ? "standardized" : "off",
+                 std::move(audit_context), top_level_site);
+  return standardized ? "Brave" : std::string();
+}
+
+std::string PrivacyRuntime::WebGlRandomString(
+    std::string_view top_level_site,
+    std::string_view seed_label,
+    size_t length,
+    PrivacyAuditContext audit_context) const {
+  PrivacyProfile profile;
+  {
+    base::AutoLock lock(state().lock);
+    if (!state().profile) {
+      return {};
+    }
+    profile = *state().profile;
+  }
+  if (profile.webgl_mode != WebGlMode::kBlock || top_level_site.empty()) {
+    PostAuditEvent(profile, "webgl", 1, "off", std::move(audit_context),
+                   top_level_site);
+    return {};
+  }
+  constexpr std::string_view kLetters =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const PrivacySeed site_seed = DeriveSiteSeed(profile, top_level_site);
+  const PrivacySeed key =
+      crypto::hmac::SignSha256(site_seed, base::as_byte_span(seed_label));
+  uint64_t value = base::U64FromNativeEndian(base::span(key).first<8u>());
+  std::string result;
+  result.reserve(length);
+  for (size_t index = 0; index < length; ++index) {
+    result.push_back(kLetters[value % kLetters.size()]);
+    value = NextLfsrValue(value);
+  }
+  PostAuditEvent(profile, "webgl", 1, "blocked", std::move(audit_context),
+                 top_level_site);
+  return result;
+}
+
+size_t PrivacyRuntime::WebGlFakeExtensionIndex(
+    std::string_view top_level_site,
+    PrivacyAuditContext audit_context) const {
+  PrivacyProfile profile;
+  {
+    base::AutoLock lock(state().lock);
+    if (!state().profile) {
+      return 0;
+    }
+    profile = *state().profile;
+  }
+  if (profile.webgl_mode != WebGlMode::kStandardizeAndFarble ||
+      top_level_site.empty()) {
+    const char* decision = profile.webgl_mode == WebGlMode::kStandardize
+                               ? "standardized"
+                           : profile.webgl_mode == WebGlMode::kBlock ? "blocked"
+                                                                     : "off";
+    PostAuditEvent(profile, "webgl", 1, decision, std::move(audit_context),
+                   top_level_site);
+    return 0;
+  }
+  const PrivacySeed seed = DeriveSiteSeed(profile, top_level_site);
+  const size_t index =
+      base::U64FromNativeEndian(base::span(seed).first<8u>()) % 21u;
+  PostAuditEvent(profile, "webgl", 1, "farbled", std::move(audit_context),
+                 top_level_site);
+  return index;
+}
+
+int64_t PrivacyRuntime::FarbleWebGlInteger(
+    std::string_view top_level_site,
+    int64_t value,
+    int discard,
+    PrivacyAuditContext audit_context) const {
+  PrivacyProfile profile;
+  {
+    base::AutoLock lock(state().lock);
+    if (!state().profile) {
+      return value;
+    }
+    profile = *state().profile;
+  }
+  if (profile.webgl_mode != WebGlMode::kStandardizeAndFarble ||
+      top_level_site.empty() || value <= 0) {
+    const char* decision = profile.webgl_mode == WebGlMode::kStandardize
+                               ? "standardized"
+                           : profile.webgl_mode == WebGlMode::kBlock ? "blocked"
+                                                                     : "off";
+    PostAuditEvent(profile, "webgl", 1, decision, std::move(audit_context),
+                   top_level_site);
+    return value;
+  }
+  const PrivacySeed site_seed = DeriveSiteSeed(profile, top_level_site);
+  const uint64_t high =
+      base::U64FromNativeEndian(base::span(site_seed).subspan<0u, 8u>());
+  const uint64_t low =
+      base::U64FromNativeEndian(base::span(site_seed).subspan<8u, 8u>());
+  absl::random_internal::randen_engine<uint64_t> prng(high ^ low);
+  prng.discard(discard);
+  const int64_t farbled = prng() % 2 != 0 ? value - 1 : value;
+  PostAuditEvent(profile, "webgl", 1, "farbled", std::move(audit_context),
+                 top_level_site);
+  return farbled;
+}
+
+WebGlProtectionResult PrivacyRuntime::ProtectWebGlPixels(
+    std::string_view top_level_site,
+    base::span<uint8_t> rgba_pixels,
+    PrivacyAuditContext audit_context) const {
+  PrivacyProfile profile;
+  {
+    base::AutoLock lock(state().lock);
+    if (!state().profile) {
+      return WebGlProtectionResult::kRuntimeNotConfigured;
+    }
+    profile = *state().profile;
+  }
+  WebGlProtectionResult result = WebGlProtectionResult::kDisabled;
+  if (profile.webgl_mode == WebGlMode::kStandardize ||
+      profile.webgl_mode == WebGlMode::kStandardizeAndFarble) {
+    // Brave balanced WebGL protection intentionally leaves readPixels output
+    // unchanged. Do not invent a pixel mutation algorithm for this boundary.
+    result = WebGlProtectionResult::kStandardized;
+  }
+  PostAuditEvent(profile, "webgl", 1,
+                 result == WebGlProtectionResult::kFarbled ? "farbled"
+                 : result == WebGlProtectionResult::kStandardized
+                     ? (profile.webgl_mode == WebGlMode::kStandardizeAndFarble
+                            ? "native-balanced"
+                            : "standardized")
+                     : "off",
+                 std::move(audit_context), top_level_site);
+  return result;
+}
+
+void PrivacyRuntime::RecordWebGlAccess(
+    std::string_view top_level_site,
+    std::string policy_decision,
+    PrivacyAuditContext audit_context) const {
+  PrivacyProfile profile;
+  {
+    base::AutoLock lock(state().lock);
+    if (!state().profile) {
+      return;
+    }
+    profile = *state().profile;
+  }
+  PostAuditEvent(profile, "webgl", 1, std::move(policy_decision),
+                 std::move(audit_context), top_level_site);
+}
+
+void PrivacyRuntime::PostAuditEvent(const PrivacyProfile& profile,
+                                    std::string category,
+                                    int algorithm_version,
+                                    std::string policy_decision,
+                                    PrivacyAuditContext audit_context,
+                                    std::string_view top_level_site) const {
+  scoped_refptr<base::SequencedTaskRunner> audit_task_runner;
+  base::RepeatingCallback<void(PrivacyAuditEvent)> audit_callback;
+  {
+    base::AutoLock lock(state().lock);
+    audit_task_runner = state().audit_task_runner;
+    audit_callback = state().audit_callback;
+  }
+  if (!audit_task_runner || !audit_callback || audit_context.api.empty()) {
+    return;
+  }
+  PrivacyAuditEvent event;
+  event.process_type = "renderer";
+  event.process_id = base::Process::Current().Pid();
+  event.thread_id =
+      base::PlatformThread::CurrentId().truncate_to_int32_for_display_only();
+  event.context_type = std::move(audit_context.context_type);
+  event.frame_id = std::move(audit_context.frame_id);
+  event.worker_id = std::move(audit_context.worker_id);
+  event.top_level_site = std::string(top_level_site);
+  event.frame_origin = std::move(audit_context.frame_origin);
+  event.category = std::move(category);
+  event.api = std::move(audit_context.api);
+  event.profile_id = profile.profile_id;
+  event.algorithm_version = algorithm_version;
+  event.policy_decision = std::move(policy_decision);
+  event.outcome = "success";
+  audit_task_runner->PostTask(FROM_HERE,
+                              base::BindOnce(audit_callback, std::move(event)));
 }
 
 void PrivacyRuntime::ResetForTesting() {

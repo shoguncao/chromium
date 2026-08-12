@@ -76,6 +76,8 @@ blink_modules_sources("webgl") {
     "oes_vertex_array_object.h",
     "ovr_multiview_2.cc",
     "ovr_multiview_2.h",
+    "privacy_webgl_extension_handler.cc",
+    "privacy_webgl_extension_handler.h",
     "webgl2_rendering_context.cc",
     "webgl2_rendering_context.h",
     "webgl2_rendering_context_base.cc",
@@ -195,6 +197,7 @@ blink_modules_sources("webgl") {
 
   public_deps = [ "//device/vr/public/mojom:vr_service_blink" ]
   deps = [
+    "//components/privacy_cef",
     "//device/vr/buildflags",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/client:gles2_interface",
