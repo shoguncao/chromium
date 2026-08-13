@@ -12,20 +12,22 @@ namespace privacy_cef {
 namespace {
 
 constexpr char kValidProfile[] = R"JSON({
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "profileId": "mac-standard-01",
   "displayName": "Mac Standard 1",
   "masterSeed": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
   "preset": "balanced",
+  "identity": {"mode":"engine-consistent"},
+  "networkFingerprint": {"mode":"chromium-sdk-default"},
   "locale": {"language":"en-US","languages":["en-US","en"],"timezone":"America/Los_Angeles"},
-  "hardware": {"cpuCores":8,"memoryGB":8,"touchClass":"none"},
+  "hardware": {"cpuCores":8,"physicalMemoryGB":8,"navigatorDeviceMemoryGB":8,"touchClass":"none"},
   "display": {"width":1728,"height":1117,"deviceScaleFactor":2,"colorDepth":24,"colorGamut":"p3"},
   "audit": {"mode":"summary","retentionDays":7,"maxFileSizeMB":20},
   "protections": {
     "canvas":{"mode":"farble","algorithm":"brave-derived","algorithmVersion":1},
     "webgl":"standardize-and-farble","audio":"farble","fonts":"standardize",
     "geometry":"environment-only","storage":"bucket","speech":"standardize",
-    "webrtc":"no-local-ip","webgpu":"disabled"
+    "webrtc":"no-local-ip","webgpu":"disabled","navigator":"standardize"
   }
 })JSON";
 
@@ -49,8 +51,10 @@ TEST(PrivacyProfileTest, ParsesValidProfile) {
   EXPECT_EQ(profile->speech_mode, SpeechMode::kStandardize);
   EXPECT_EQ(profile->webrtc_mode, WebRtcMode::kNoLocalIp);
   EXPECT_EQ(profile->webgpu_mode, WebGpuMode::kDisabled);
+  EXPECT_EQ(profile->navigator_mode, NavigatorMode::kStandardize);
   EXPECT_EQ(profile->cpu_cores, 8);
-  EXPECT_EQ(profile->memory_gb, 8);
+  EXPECT_EQ(profile->physical_memory_gb, 8);
+  EXPECT_EQ(profile->navigator_device_memory_gb, 8);
 }
 
 TEST(PrivacyProfileTest, RejectsUnsupportedHardwareBuckets) {
@@ -58,8 +62,10 @@ TEST(PrivacyProfileTest, RejectsUnsupportedHardwareBuckets) {
     std::string_view original;
     std::string_view replacement;
   };
-  for (const Case& test_case : {Case{"\"cpuCores\":8", "\"cpuCores\":6"},
-                                Case{"\"memoryGB\":8", "\"memoryGB\":12"}}) {
+  for (const Case& test_case : {
+           Case{"\"cpuCores\":8", "\"cpuCores\":6"},
+           Case{"\"navigatorDeviceMemoryGB\":8",
+                "\"navigatorDeviceMemoryGB\":4"}}) {
     std::string json = kValidProfile;
     const size_t position = json.find(test_case.original);
     ASSERT_NE(position, std::string::npos);

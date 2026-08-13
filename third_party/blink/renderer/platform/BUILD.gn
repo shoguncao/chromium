@@ -677,6 +677,8 @@ component("platform") {
     "fonts/font_fallback_iterator.h",
     "fonts/font_fallback_list.cc",
     "fonts/font_fallback_list.h",
+    "../privacy_cef/font_whitelist.cc",
+    "../privacy_cef/font_whitelist.h",
     "fonts/font_fallback_map.cc",
     "fonts/font_fallback_map.h",
     "fonts/font_fallback_priority.h",
@@ -1839,6 +1841,7 @@ component("platform") {
   deps = [
     ":font_format_check",
     ":rustfft_ffi",
+    "//components/privacy_cef",
     "//base:base_static",
     "//base/allocator:buildflags",
     "//build:chromecast_buildflags",

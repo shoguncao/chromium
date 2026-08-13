@@ -103,6 +103,18 @@ class PrivacyRuntime {
                           std::string policy_decision,
                           PrivacyAuditContext audit_context) const;
 
+  FontsMode GetFontsMode() const;
+  NavigatorMode GetNavigatorMode() const;
+
+  struct DisplayProfile {
+    int width;
+    int height;
+    int device_scale_factor;
+    int color_depth;
+    std::string color_gamut;
+  };
+  std::optional<DisplayProfile> GetDisplayProfile() const;
+
   std::optional<int> GetProfileCpuCores() const;
   std::optional<int> GetProfileMemoryGb() const;
   void RecordNavigatorHardwareAccess(std::string_view top_level_site,

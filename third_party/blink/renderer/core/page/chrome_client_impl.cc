@@ -31,6 +31,8 @@
 
 #include "third_party/blink/renderer/core/page/chrome_client_impl.h"
 
+#include "components/privacy_cef/privacy_runtime.h"
+
 #include <memory>
 #include <optional>
 #include <utility>
@@ -64,6 +66,8 @@
 #include "third_party/blink/public/web/web_settings.h"
 #include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/blink/public/web/web_window_features.h"
+#include "ui/gfx/color_space.h"
+#include "ui/gfx/display_color_spaces.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_controller.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -655,12 +659,38 @@ float ChromeClientImpl::WindowToViewportScalar(LocalFrame* frame,
 
 const display::ScreenInfo& ChromeClientImpl::GetScreenInfo(
     LocalFrame& frame) const {
-  return frame.GetWidgetForLocalRoot()->GetScreenInfo();
+  const auto display_profile =
+      privacy_cef::PrivacyRuntime::GetInstance().GetDisplayProfile();
+  if (!display_profile) {
+    return frame.GetWidgetForLocalRoot()->GetScreenInfo();
+  }
+  privacy_profiled_screen_info_ = frame.GetWidgetForLocalRoot()->GetScreenInfo();
+  privacy_profiled_screen_info_.rect =
+      gfx::Rect(display_profile->width, display_profile->height);
+  privacy_profiled_screen_info_.available_rect =
+      privacy_profiled_screen_info_.rect;
+  privacy_profiled_screen_info_.device_scale_factor =
+      display_profile->device_scale_factor;
+  privacy_profiled_screen_info_.depth = display_profile->color_depth;
+  privacy_profiled_screen_info_.display_color_spaces = gfx::DisplayColorSpaces(
+      display_profile->color_gamut == "p3"
+          ? gfx::ColorSpace::CreateDisplayP3D65()
+          : gfx::ColorSpace::CreateSRGB());
+  privacy_profiled_screen_info_.is_extended = false;
+  privacy_profiled_screen_info_.is_primary = true;
+  return privacy_profiled_screen_info_;
 }
 
 const display::ScreenInfos& ChromeClientImpl::GetScreenInfos(
     LocalFrame& frame) const {
-  return frame.GetWidgetForLocalRoot()->GetScreenInfos();
+  const auto display_profile =
+      privacy_cef::PrivacyRuntime::GetInstance().GetDisplayProfile();
+  if (!display_profile) {
+    return frame.GetWidgetForLocalRoot()->GetScreenInfos();
+  }
+  display::ScreenInfo screen_info = GetScreenInfo(frame);
+  privacy_profiled_screen_infos_ = display::ScreenInfos(screen_info);
+  return privacy_profiled_screen_infos_;
 }
 
 const display::ScreenInfo& ChromeClientImpl::GetOriginalScreenInfo(
