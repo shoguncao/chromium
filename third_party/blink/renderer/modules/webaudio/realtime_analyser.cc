@@ -79,6 +79,27 @@ RealtimeAnalyser::RealtimeAnalyser(unsigned render_quantum_frames)
   analysis_frame_ = std::make_unique<FFTFrame>(kDefaultFFTSize);
 }
 
+void RealtimeAnalyser::SetPrivacyContext(
+    std::string top_level_site,
+    privacy_cef::PrivacyAuditContext audit_context,
+    std::optional<privacy_cef::AudioFarblingParameters> parameters) {
+  privacy_top_level_site_ = std::move(top_level_site);
+  privacy_audit_context_ = std::move(audit_context);
+  if (parameters) {
+    audio_farbling_helper_.emplace(parameters->fudge_factor, parameters->seed,
+                                   parameters->maximum);
+  } else {
+    audio_farbling_helper_.reset();
+  }
+}
+
+void RealtimeAnalyser::RecordPrivacyAccess(const char* api) const {
+  auto audit = privacy_audit_context_;
+  audit.api = api;
+  privacy_cef::PrivacyRuntime::GetInstance().RecordAudioAccess(
+      privacy_top_level_site_, std::move(audit));
+}
+
 bool RealtimeAnalyser::SetFftSize(uint32_t size) {
   DCHECK(IsMainThread());
 
@@ -102,6 +123,7 @@ void RealtimeAnalyser::GetFloatFrequencyData(DOMFloat32Array* destination_array,
                                              double current_time) {
   DCHECK(IsMainThread());
   DCHECK(destination_array);
+  RecordPrivacyAccess("AnalyserNode.getFloatFrequencyData");
 
   if (current_time > last_analysis_time_) {
     // Time has advanced since the last call; update the FFT data.
@@ -114,6 +136,11 @@ void RealtimeAnalyser::GetFloatFrequencyData(DOMFloat32Array* destination_array,
   const size_t len = std::min(source_length, destination_array->length());
   if (len > 0) {
     base::span<float> destination = destination_array->AsSpan();
+    if (audio_farbling_helper_) {
+      audio_farbling_helper_->FarbleConvertFloatToDb(
+          magnitude_buffer_.as_span(), destination, len);
+      return;
+    }
     for (unsigned i = 0; i < len; ++i) {
       const float linear_value = magnitude_buffer_[i];
       const double db_mag = audio_utilities::LinearToDecibels(linear_value);
@@ -126,6 +153,7 @@ void RealtimeAnalyser::GetByteFrequencyData(DOMUint8Array* destination_array,
                                             double current_time) {
   DCHECK(IsMainThread());
   DCHECK(destination_array);
+  RecordPrivacyAccess("AnalyserNode.getByteFrequencyData");
 
   if (current_time > last_analysis_time_) {
     // Time has advanced since the last call; update the FFT data.
@@ -147,6 +175,12 @@ void RealtimeAnalyser::GetByteFrequencyData(DOMUint8Array* destination_array,
     const double min_decibels = min_decibels_;
 
     base::span<unsigned char> destination = destination_array->AsSpan();
+    if (audio_farbling_helper_) {
+      audio_farbling_helper_->FarbleConvertToByteData(
+          magnitude_buffer_.as_span(), destination, len, min_decibels,
+          range_scale_factor);
+      return;
+    }
     for (unsigned i = 0; i < len; ++i) {
       const float linear_value = magnitude_buffer_[i];
       const double db_mag = audio_utilities::LinearToDecibels(linear_value);
@@ -167,6 +201,7 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
     DOMFloat32Array* destination_array) {
   DCHECK(IsMainThread());
   DCHECK(destination_array);
+  RecordPrivacyAccess("AnalyserNode.getFloatTimeDomainData");
 
   const unsigned fft_size = FftSize();
   const size_t len =
@@ -178,6 +213,11 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
     const unsigned write_index = GetWriteIndex();
 
     base::span<float> destination = destination_array->AsSpan();
+    if (audio_farbling_helper_) {
+      audio_farbling_helper_->FarbleFloatTimeDomainData(
+          input_buffer_.as_span(), destination, len, write_index, fft_size);
+      return;
+    }
     for (unsigned i = 0; i < len; ++i) {
       // Buffer access is protected due to modulo operation.
       float value =
@@ -192,6 +232,7 @@ void RealtimeAnalyser::GetFloatTimeDomainData(
 void RealtimeAnalyser::GetByteTimeDomainData(DOMUint8Array* destination_array) {
   DCHECK(IsMainThread());
   DCHECK(destination_array);
+  RecordPrivacyAccess("AnalyserNode.getByteTimeDomainData");
 
   const unsigned fft_size = FftSize();
   const size_t len =
@@ -203,6 +244,11 @@ void RealtimeAnalyser::GetByteTimeDomainData(DOMUint8Array* destination_array) {
     const unsigned write_index = GetWriteIndex();
 
     base::span<unsigned char> destination = destination_array->AsSpan();
+    if (audio_farbling_helper_) {
+      audio_farbling_helper_->FarbleByteTimeDomainData(
+          input_buffer_.as_span(), destination, len, write_index, fft_size);
+      return;
+    }
     for (unsigned i = 0; i < len; ++i) {
       // Buffer access is protected due to modulo operation.
       const float value =

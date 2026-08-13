@@ -2,6 +2,8 @@ import("//testing/test.gni")
 
 source_set("privacy_cef") {
   sources = [
+    "audio_farbling.cc",
+    "audio_farbling.h",
     "canvas_farbling.cc",
     "canvas_farbling.h",
     "privacy_audit_service.cc",
@@ -26,6 +28,7 @@ source_set("privacy_cef") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "audio_farbling_unittest.cc",
     "canvas_farbling_unittest.cc",
     "privacy_audit_service_unittest.cc",
     "privacy_profile_unittest.cc",

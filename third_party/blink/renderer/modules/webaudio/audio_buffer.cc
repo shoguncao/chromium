@@ -32,7 +32,10 @@
 
 #include "base/compiler_specific.h"
 #include "base/containers/span.h"
+#include "components/privacy_cef/privacy_runtime.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_audio_buffer_options.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/html/canvas/privacy_canvas_context.h"
 #include "third_party/blink/renderer/modules/webaudio/base_audio_context.h"
 #include "third_party/blink/renderer/platform/audio/audio_bus.h"
 #include "third_party/blink/renderer/platform/audio/audio_utilities.h"
@@ -202,6 +205,7 @@ AudioBuffer::AudioBuffer(AudioBus* bus)
 }
 
 NotShared<DOMFloat32Array> AudioBuffer::getChannelData(
+    ScriptState* script_state,
     unsigned channel_index,
     ExceptionState& exception_state) {
   if (channel_index >= channels_.size()) {
@@ -213,7 +217,13 @@ NotShared<DOMFloat32Array> AudioBuffer::getChannelData(
     return NotShared<DOMFloat32Array>(nullptr);
   }
 
-  return getChannelData(channel_index);
+  NotShared<DOMFloat32Array> destination = getChannelData(channel_index);
+  if (ExecutionContext* context = ExecutionContext::From(script_state)) {
+    privacy_cef::PrivacyRuntime::GetInstance().ProtectAudioChannel(
+        PrivacyCanvasTopLevelSite(context), destination->AsSpan(),
+        PrivacyExecutionAuditContext(context, "AudioBuffer.getChannelData"));
+  }
+  return destination;
 }
 
 NotShared<DOMFloat32Array> AudioBuffer::getChannelData(unsigned channel_index) {
@@ -224,13 +234,16 @@ NotShared<DOMFloat32Array> AudioBuffer::getChannelData(unsigned channel_index) {
   return NotShared<DOMFloat32Array>(channels_[channel_index].Get());
 }
 
-void AudioBuffer::copyFromChannel(NotShared<DOMFloat32Array> destination,
+void AudioBuffer::copyFromChannel(ScriptState* script_state,
+                                  NotShared<DOMFloat32Array> destination,
                                   int32_t channel_number,
                                   ExceptionState& exception_state) {
-  return copyFromChannel(destination, channel_number, 0, exception_state);
+  return copyFromChannel(script_state, destination, channel_number, 0,
+                         exception_state);
 }
 
-void AudioBuffer::copyFromChannel(NotShared<DOMFloat32Array> destination,
+void AudioBuffer::copyFromChannel(ScriptState* script_state,
+                                  NotShared<DOMFloat32Array> destination,
                                   int32_t channel_number,
                                   size_t buffer_offset,
                                   ExceptionState& exception_state) {
@@ -267,6 +280,11 @@ void AudioBuffer::copyFromChannel(NotShared<DOMFloat32Array> destination,
   DCHECK(dst.data());
 
   dst.first(count).copy_from(src.subspan(buffer_offset, count));
+  if (ExecutionContext* context = ExecutionContext::From(script_state)) {
+    privacy_cef::PrivacyRuntime::GetInstance().ProtectAudioChannel(
+        PrivacyCanvasTopLevelSite(context), dst.first(count),
+        PrivacyExecutionAuditContext(context, "AudioBuffer.copyFromChannel"));
+  }
 }
 
 void AudioBuffer::copyToChannel(NotShared<DOMFloat32Array> source,

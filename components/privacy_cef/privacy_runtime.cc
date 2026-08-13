@@ -4,6 +4,7 @@
 
 #include "components/privacy_cef/privacy_runtime.h"
 
+#include <limits>
 #include <optional>
 #include <utility>
 
@@ -266,6 +267,72 @@ void PrivacyRuntime::RecordWebGlAccess(
   }
   PostAuditEvent(profile, "webgl", 1, std::move(policy_decision),
                  std::move(audit_context), top_level_site);
+}
+
+AudioMode PrivacyRuntime::GetAudioMode() const {
+  base::AutoLock lock(state().lock);
+  return state().profile ? state().profile->audio_mode : AudioMode::kOff;
+}
+
+std::optional<AudioFarblingParameters>
+PrivacyRuntime::GetAudioFarblingParameters(
+    std::string_view top_level_site) const {
+  PrivacyProfile profile;
+  {
+    base::AutoLock lock(state().lock);
+    if (!state().profile) {
+      return std::nullopt;
+    }
+    profile = *state().profile;
+  }
+  if (profile.audio_mode == AudioMode::kOff || top_level_site.empty()) {
+    return std::nullopt;
+  }
+  const PrivacySeed site_seed = DeriveSiteSeed(profile, top_level_site);
+  const uint64_t high =
+      base::U64FromNativeEndian(base::span(site_seed).subspan<0u, 8u>());
+  const uint64_t low =
+      base::U64FromNativeEndian(base::span(site_seed).subspan<8u, 8u>());
+  return AudioFarblingParameters{
+      .fudge_factor =
+          0.999 +
+          ((high / static_cast<double>(std::numeric_limits<uint64_t>::max())) /
+           1000.0),
+      .seed = low,
+      .maximum = profile.audio_mode == AudioMode::kBlock,
+  };
+}
+
+bool PrivacyRuntime::ProtectAudioChannel(
+    std::string_view top_level_site,
+    base::span<float> samples,
+    PrivacyAuditContext audit_context) const {
+  const auto parameters = GetAudioFarblingParameters(top_level_site);
+  if (parameters && !samples.empty()) {
+    AudioFarblingHelper(parameters->fudge_factor, parameters->seed,
+                        parameters->maximum)
+        .FarbleAudioChannel(samples);
+  }
+  RecordAudioAccess(top_level_site, std::move(audit_context));
+  return parameters.has_value();
+}
+
+void PrivacyRuntime::RecordAudioAccess(
+    std::string_view top_level_site,
+    PrivacyAuditContext audit_context) const {
+  PrivacyProfile profile;
+  {
+    base::AutoLock lock(state().lock);
+    if (!state().profile) {
+      return;
+    }
+    profile = *state().profile;
+  }
+  const char* decision = profile.audio_mode == AudioMode::kFarble  ? "farbled"
+                         : profile.audio_mode == AudioMode::kBlock ? "blocked"
+                                                                   : "off";
+  PostAuditEvent(profile, "audio", 1, decision, std::move(audit_context),
+                 top_level_site);
 }
 
 void PrivacyRuntime::PostAuditEvent(const PrivacyProfile& profile,

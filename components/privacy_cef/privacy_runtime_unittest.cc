@@ -29,6 +29,12 @@ PrivacyProfile WebGlFarblingProfile() {
   return profile;
 }
 
+PrivacyProfile AudioFarblingProfile(AudioMode mode = AudioMode::kFarble) {
+  PrivacyProfile profile = FarblingProfile();
+  profile.audio_mode = mode;
+  return profile;
+}
+
 class PrivacyRuntimeTest : public testing::Test {
  protected:
   void TearDown() override { PrivacyRuntime::GetInstance().ResetForTesting(); }
@@ -104,6 +110,46 @@ TEST_F(PrivacyRuntimeTest, BraveBalancedWebGlReadPixelsRemainsNative) {
       PrivacyRuntime::GetInstance().ProtectWebGlPixels("example.com", pixels),
       WebGlProtectionResult::kStandardized);
   EXPECT_EQ(pixels, original);
+}
+
+TEST_F(PrivacyRuntimeTest, AudioParametersAreStableAndSitePartitioned) {
+  PrivacyRuntime::GetInstance().SetProfile(AudioFarblingProfile());
+  const auto first = PrivacyRuntime::GetInstance().GetAudioFarblingParameters(
+      "https://example.com");
+  const auto repeated =
+      PrivacyRuntime::GetInstance().GetAudioFarblingParameters(
+          "https://example.com");
+  const auto other = PrivacyRuntime::GetInstance().GetAudioFarblingParameters(
+      "https://github.com");
+  ASSERT_TRUE(first);
+  ASSERT_TRUE(repeated);
+  ASSERT_TRUE(other);
+  EXPECT_DOUBLE_EQ(first->fudge_factor, repeated->fudge_factor);
+  EXPECT_EQ(first->seed, repeated->seed);
+  EXPECT_NE(first->seed, other->seed);
+  EXPECT_FALSE(first->maximum);
+}
+
+TEST_F(PrivacyRuntimeTest, AudioOffPreservesSamples) {
+  PrivacyProfile profile = AudioFarblingProfile(AudioMode::kOff);
+  PrivacyRuntime::GetInstance().SetProfile(std::move(profile));
+  std::array<float, 3> samples = {0.25f, -0.5f, 1.0f};
+  const auto original = samples;
+  EXPECT_FALSE(PrivacyRuntime::GetInstance().ProtectAudioChannel(
+      "https://example.com", samples));
+  EXPECT_EQ(samples, original);
+}
+
+TEST_F(PrivacyRuntimeTest, AudioMaximumIsStableAndInputIndependent) {
+  PrivacyRuntime::GetInstance().SetProfile(
+      AudioFarblingProfile(AudioMode::kBlock));
+  std::array<float, 4> first = {-1.0f, -0.5f, 0.5f, 1.0f};
+  std::array<float, 4> second = {7.0f, 8.0f, 9.0f, 10.0f};
+  EXPECT_TRUE(PrivacyRuntime::GetInstance().ProtectAudioChannel(
+      "https://example.com", first));
+  EXPECT_TRUE(PrivacyRuntime::GetInstance().ProtectAudioChannel(
+      "https://example.com", second));
+  EXPECT_EQ(first, second);
 }
 
 }  // namespace

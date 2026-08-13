@@ -28,7 +28,11 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
+#include <string>
 
+#include "components/privacy_cef/audio_farbling.h"
+#include "components/privacy_cef/privacy_runtime.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
 #include "third_party/blink/renderer/platform/audio/audio_array.h"
 #include "third_party/blink/renderer/platform/audio/fft_frame.h"
@@ -70,6 +74,11 @@ class RealtimeAnalyser final {
   void GetFloatTimeDomainData(DOMFloat32Array*);
   void GetByteTimeDomainData(DOMUint8Array*);
 
+  void SetPrivacyContext(
+      std::string top_level_site,
+      privacy_cef::PrivacyAuditContext audit_context,
+      std::optional<privacy_cef::AudioFarblingParameters> parameters);
+
   // The audio thread writes input data here.
   void WriteInput(AudioBus*, uint32_t frames_to_process);
 
@@ -82,6 +91,7 @@ class RealtimeAnalyser final {
   }
 
   void DoFFTAnalysis();
+  void RecordPrivacyAccess(const char* api) const;
 
   // The audio thread writes the input audio here.
   AudioFloatArray input_buffer_;
@@ -105,6 +115,10 @@ class RealtimeAnalyser final {
 
   // Time at which the FFT was last computed.
   double last_analysis_time_ = -1.0;
+
+  std::string privacy_top_level_site_;
+  privacy_cef::PrivacyAuditContext privacy_audit_context_;
+  std::optional<privacy_cef::AudioFarblingHelper> audio_farbling_helper_;
 };
 
 }  // namespace blink
