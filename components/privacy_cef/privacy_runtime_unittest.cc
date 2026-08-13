@@ -129,6 +129,18 @@ TEST_F(PrivacyRuntimeTest, WebGpuModeUsesValidatedProfile) {
             WebGpuMode::kStandardize);
 }
 
+TEST_F(PrivacyRuntimeTest, NavigatorHardwareUsesProfileAndDefaultsToNative) {
+  EXPECT_FALSE(PrivacyRuntime::GetInstance().GetProfileCpuCores());
+  EXPECT_FALSE(PrivacyRuntime::GetInstance().GetProfileMemoryGb());
+
+  PrivacyProfile profile = FarblingProfile();
+  profile.cpu_cores = 12;
+  profile.memory_gb = 32;
+  PrivacyRuntime::GetInstance().SetProfile(std::move(profile));
+  EXPECT_EQ(PrivacyRuntime::GetInstance().GetProfileCpuCores(), 12);
+  EXPECT_EQ(PrivacyRuntime::GetInstance().GetProfileMemoryGb(), 32);
+}
+
 TEST_F(PrivacyRuntimeTest, AudioParametersAreStableAndSitePartitioned) {
   PrivacyRuntime::GetInstance().SetProfile(AudioFarblingProfile());
   const auto first = PrivacyRuntime::GetInstance().GetAudioFarblingParameters(

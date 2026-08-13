@@ -15,6 +15,7 @@
 
 #if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_WIN)
 #include <sys/utsname.h>
+
 #include "third_party/blink/renderer/platform/wtf/thread_specific.h"
 #include "third_party/blink/renderer/platform/wtf/threading.h"
 #endif
@@ -69,9 +70,10 @@ void NavigatorBase::Trace(Visitor* visitor) const {
   Supplementable<NavigatorBase>::Trace(visitor);
 }
 
-unsigned int NavigatorBase::hardwareConcurrency() const {
+unsigned int NavigatorBase::hardwareConcurrency(
+    ScriptState* script_state) const {
   unsigned int hardware_concurrency =
-      NavigatorConcurrentHardware::hardwareConcurrency();
+      NavigatorConcurrentHardware::hardwareConcurrency(script_state);
 
   probe::ApplyHardwareConcurrencyOverride(
       probe::ToCoreProbeSink(GetExecutionContext()), hardware_concurrency);

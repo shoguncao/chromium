@@ -54,7 +54,7 @@ class CORE_EXPORT NavigatorBase : public ScriptWrappable,
   String platform() const override;
   void Trace(Visitor* visitor) const override;
 
-  unsigned int hardwareConcurrency() const override;
+  unsigned int hardwareConcurrency(ScriptState* script_state) const override;
 
  protected:
   ExecutionContext* GetUAExecutionContext() const override;
