@@ -112,6 +112,23 @@ TEST_F(PrivacyRuntimeTest, BraveBalancedWebGlReadPixelsRemainsNative) {
   EXPECT_EQ(pixels, original);
 }
 
+TEST_F(PrivacyRuntimeTest, WebGpuModeDefaultsToOffWithoutProfile) {
+  EXPECT_EQ(PrivacyRuntime::GetInstance().GetWebGpuMode(), WebGpuMode::kOff);
+}
+
+TEST_F(PrivacyRuntimeTest, WebGpuModeUsesValidatedProfile) {
+  PrivacyProfile profile = WebGlFarblingProfile();
+  profile.webgpu_mode = WebGpuMode::kDisabled;
+  PrivacyRuntime::GetInstance().SetProfile(profile);
+  EXPECT_EQ(PrivacyRuntime::GetInstance().GetWebGpuMode(),
+            WebGpuMode::kDisabled);
+
+  profile.webgpu_mode = WebGpuMode::kStandardize;
+  PrivacyRuntime::GetInstance().SetProfile(profile);
+  EXPECT_EQ(PrivacyRuntime::GetInstance().GetWebGpuMode(),
+            WebGpuMode::kStandardize);
+}
+
 TEST_F(PrivacyRuntimeTest, AudioParametersAreStableAndSitePartitioned) {
   PrivacyRuntime::GetInstance().SetProfile(AudioFarblingProfile());
   const auto first = PrivacyRuntime::GetInstance().GetAudioFarblingParameters(

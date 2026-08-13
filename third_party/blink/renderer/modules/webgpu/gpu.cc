@@ -10,6 +10,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/synchronization/waitable_event.h"
+#include "components/privacy_cef/privacy_runtime.h"
 #include "gpu/command_buffer/client/webgpu_interface.h"
 #include "gpu/config/gpu_finch_features.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -28,6 +29,7 @@
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/execution_context/navigator_base.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/html/canvas/privacy_canvas_context.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/modules/webgpu/dawn_enum_conversions.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_adapter.h"
@@ -194,8 +196,9 @@ void GPU::OnRequestAdapterCallback(
     wgpu::StringView error_message) {
   GPUAdapter* gpu_adapter = nullptr;
 
-  // wgpu::RequestAdapterStatus is part of the stable API, so is safe to log to histograms.
-  // The macro + `to_underlying` converts the enum to an int to calculate the max range.
+  // wgpu::RequestAdapterStatus is part of the stable API, so is safe to log to
+  // histograms. The macro + `to_underlying` converts the enum to an int to
+  // calculate the max range.
   UMA_HISTOGRAM_ENUMERATION(
       "GPU.RequestAdapterStatus.WebGPU", status,
       std::to_underlying(wgpu::RequestAdapterStatus::Error) + 1);
@@ -408,6 +411,21 @@ ScriptPromise<IDLNullable<GPUAdapter>> GPU::requestAdapter(
       MakeGarbageCollected<ScriptPromiseResolver<IDLNullable<GPUAdapter>>>(
           script_state);
   auto promise = resolver->Promise();
+  const auto webgpu_mode =
+      privacy_cef::PrivacyRuntime::GetInstance().GetWebGpuMode();
+  if (webgpu_mode == privacy_cef::WebGpuMode::kDisabled) {
+    privacy_cef::PrivacyRuntime::GetInstance().RecordWebGpuAccess(
+        PrivacyCanvasTopLevelSite(execution_context), "blocked",
+        PrivacyExecutionAuditContext(execution_context, "GPU.requestAdapter"));
+    UseCounter::Count(execution_context, WebFeature::kWebGPURequestAdapter);
+    resolver->Resolve(nullptr);
+    return promise;
+  }
+  privacy_cef::PrivacyRuntime::GetInstance().RecordWebGpuAccess(
+      PrivacyCanvasTopLevelSite(execution_context),
+      webgpu_mode == privacy_cef::WebGpuMode::kStandardize ? "standardized"
+                                                           : "off",
+      PrivacyExecutionAuditContext(execution_context, "GPU.requestAdapter"));
   RequestAdapterImpl(script_state, options, resolver);
   return promise;
 }
