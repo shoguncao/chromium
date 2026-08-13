@@ -356,6 +356,33 @@ void PrivacyRuntime::RecordWebGpuAccess(
                  std::move(audit_context), top_level_site);
 }
 
+std::optional<int> PrivacyRuntime::GetProfileCpuCores() const {
+  base::AutoLock lock(state().lock);
+  return state().profile ? std::optional(state().profile->cpu_cores)
+                         : std::nullopt;
+}
+
+std::optional<int> PrivacyRuntime::GetProfileMemoryGb() const {
+  base::AutoLock lock(state().lock);
+  return state().profile ? std::optional(state().profile->memory_gb)
+                         : std::nullopt;
+}
+
+void PrivacyRuntime::RecordNavigatorHardwareAccess(
+    std::string_view top_level_site,
+    PrivacyAuditContext audit_context) const {
+  PrivacyProfile profile;
+  {
+    base::AutoLock lock(state().lock);
+    if (!state().profile) {
+      return;
+    }
+    profile = *state().profile;
+  }
+  PostAuditEvent(profile, "navigator", 1, "profiled", std::move(audit_context),
+                 top_level_site);
+}
+
 void PrivacyRuntime::PostAuditEvent(const PrivacyProfile& profile,
                                     std::string category,
                                     int algorithm_version,

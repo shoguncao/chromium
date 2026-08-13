@@ -9,9 +9,11 @@
 
 namespace blink {
 
+class ScriptState;
+
 class CORE_EXPORT NavigatorConcurrentHardware {
  public:
-  virtual unsigned hardwareConcurrency() const;
+  virtual unsigned hardwareConcurrency(ScriptState* script_state) const;
 };
 
 }  // namespace blink

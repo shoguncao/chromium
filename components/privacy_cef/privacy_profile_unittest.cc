@@ -49,6 +49,25 @@ TEST(PrivacyProfileTest, ParsesValidProfile) {
   EXPECT_EQ(profile->speech_mode, SpeechMode::kStandardize);
   EXPECT_EQ(profile->webrtc_mode, WebRtcMode::kNoLocalIp);
   EXPECT_EQ(profile->webgpu_mode, WebGpuMode::kDisabled);
+  EXPECT_EQ(profile->cpu_cores, 8);
+  EXPECT_EQ(profile->memory_gb, 8);
+}
+
+TEST(PrivacyProfileTest, RejectsUnsupportedHardwareBuckets) {
+  struct Case {
+    std::string_view original;
+    std::string_view replacement;
+  };
+  for (const Case& test_case : {Case{"\"cpuCores\":8", "\"cpuCores\":6"},
+                                Case{"\"memoryGB\":8", "\"memoryGB\":12"}}) {
+    std::string json = kValidProfile;
+    const size_t position = json.find(test_case.original);
+    ASSERT_NE(position, std::string::npos);
+    json.replace(position, test_case.original.size(), test_case.replacement);
+    std::string error;
+    EXPECT_FALSE(PrivacyProfile::Parse(json, &error));
+    EXPECT_EQ(error, "profile contains an out-of-range numeric value");
+  }
 }
 
 TEST(PrivacyProfileTest, RejectsSeedWithWrongSize) {

@@ -103,6 +103,11 @@ class PrivacyRuntime {
                           std::string policy_decision,
                           PrivacyAuditContext audit_context) const;
 
+  std::optional<int> GetProfileCpuCores() const;
+  std::optional<int> GetProfileMemoryGb() const;
+  void RecordNavigatorHardwareAccess(std::string_view top_level_site,
+                                     PrivacyAuditContext audit_context) const;
+
   void ResetForTesting();
 
  private:

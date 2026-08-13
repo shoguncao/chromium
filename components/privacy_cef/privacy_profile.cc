@@ -304,12 +304,9 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
       RequiredString(*canvas, "algorithm", error);
   std::optional<int> canvas_version =
       RequiredInt(*canvas, "algorithmVersion", error);
-  const std::string* webgl_mode =
-      RequiredString(*protections, "webgl", error);
-  const std::string* audio_mode =
-      RequiredString(*protections, "audio", error);
-  const std::string* fonts_mode =
-      RequiredString(*protections, "fonts", error);
+  const std::string* webgl_mode = RequiredString(*protections, "webgl", error);
+  const std::string* audio_mode = RequiredString(*protections, "audio", error);
+  const std::string* fonts_mode = RequiredString(*protections, "fonts", error);
   const std::string* geometry_mode =
       RequiredString(*protections, "geometry", error);
   const std::string* storage_mode =
@@ -329,9 +326,14 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
     return std::nullopt;
   }
 
-  if (*cpu_cores <= 0 || *memory_gb <= 0 || *width <= 0 || *height <= 0 ||
-      (*scale != 1 && *scale != 2) || *retention < 1 || *retention > 30 ||
-      *max_size < 1 || *max_size > 100) {
+  constexpr int kCpuCoreBuckets[] = {2, 4, 8, 12, 16};
+  constexpr int kMemoryGbBuckets[] = {4, 8, 16, 32};
+  if (std::ranges::find(kCpuCoreBuckets, *cpu_cores) ==
+          std::ranges::end(kCpuCoreBuckets) ||
+      std::ranges::find(kMemoryGbBuckets, *memory_gb) ==
+          std::ranges::end(kMemoryGbBuckets) ||
+      *width <= 0 || *height <= 0 || (*scale != 1 && *scale != 2) ||
+      *retention < 1 || *retention > 30 || *max_size < 1 || *max_size > 100) {
     Fail("profile contains an out-of-range numeric value", error);
     return std::nullopt;
   }

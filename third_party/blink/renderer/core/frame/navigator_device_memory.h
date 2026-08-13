@@ -9,9 +9,11 @@
 
 namespace blink {
 
+class ScriptState;
+
 class CORE_EXPORT NavigatorDeviceMemory {
  public:
-  float deviceMemory() const;
+  float deviceMemory(ScriptState* script_state) const;
 };
 
 }  // namespace blink
