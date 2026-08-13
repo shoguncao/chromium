@@ -335,6 +335,27 @@ void PrivacyRuntime::RecordAudioAccess(
                  top_level_site);
 }
 
+WebGpuMode PrivacyRuntime::GetWebGpuMode() const {
+  base::AutoLock lock(state().lock);
+  return state().profile ? state().profile->webgpu_mode : WebGpuMode::kOff;
+}
+
+void PrivacyRuntime::RecordWebGpuAccess(
+    std::string_view top_level_site,
+    std::string policy_decision,
+    PrivacyAuditContext audit_context) const {
+  PrivacyProfile profile;
+  {
+    base::AutoLock lock(state().lock);
+    if (!state().profile) {
+      return;
+    }
+    profile = *state().profile;
+  }
+  PostAuditEvent(profile, "webgpu", 1, std::move(policy_decision),
+                 std::move(audit_context), top_level_site);
+}
+
 void PrivacyRuntime::PostAuditEvent(const PrivacyProfile& profile,
                                     std::string category,
                                     int algorithm_version,

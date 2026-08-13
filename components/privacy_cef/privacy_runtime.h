@@ -98,6 +98,11 @@ class PrivacyRuntime {
   void RecordAudioAccess(std::string_view top_level_site,
                          PrivacyAuditContext audit_context) const;
 
+  WebGpuMode GetWebGpuMode() const;
+  void RecordWebGpuAccess(std::string_view top_level_site,
+                          std::string policy_decision,
+                          PrivacyAuditContext audit_context) const;
+
   void ResetForTesting();
 
  private:

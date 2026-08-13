@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/modules/webgpu/gpu_adapter.h"
 
+#include "components/privacy_cef/privacy_runtime.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
@@ -45,7 +46,7 @@ GPUSupportedFeatures* MakeFeatureNameSet(wgpu::Adapter adapter) {
     if (feature_name_enum_optional) {
       features->AddFeatureName(
           V8GPUFeatureName(feature_name_enum_optional.value()));
-      }
+    }
   }
   return features;
 }
@@ -125,14 +126,30 @@ GPUAdapter::GPUAdapter(
 GPUAdapterInfo* GPUAdapter::CreateAdapterInfoForAdapter() {
   bool is_fallback_adapter = adapter_type_ == wgpu::AdapterType::CPU;
 
+  // Privacy CEF ports Brave Core's WebGPU Balanced behavior from fixed commit
+  // 66867f5c43390a235672bfc3e091d02e84d6892c: scrub the three direct
+  // adapter identifiers while keeping WebGPU itself and its capabilities
+  // usable. Developer features intentionally retain Chromium's native full
+  // diagnostics, matching Brave; the shipped App never enables that switch.
+  String exposed_vendor = vendor_;
+  String exposed_architecture = architecture_;
+  String exposed_device = device_;
+  if (privacy_cef::PrivacyRuntime::GetInstance().GetWebGpuMode() ==
+          privacy_cef::WebGpuMode::kStandardize &&
+      !RuntimeEnabledFeatures::WebGPUDeveloperFeaturesEnabled()) {
+    exposed_vendor = String();
+    exposed_architecture = String();
+    exposed_device = String();
+  }
+
   GPUAdapterInfo* info;
   if (RuntimeEnabledFeatures::WebGPUDeveloperFeaturesEnabled()) {
     // If WebGPU developer features have been enabled then provide all available
     // adapter info values.
     info = MakeGarbageCollected<GPUAdapterInfo>(
-        vendor_, architecture_, subgroup_min_size_, subgroup_max_size_,
-        is_fallback_adapter, device_, description_, driver_,
-        FromDawnEnum(backend_type_), FromDawnEnum(adapter_type_),
+        exposed_vendor, exposed_architecture, subgroup_min_size_,
+        subgroup_max_size_, is_fallback_adapter, exposed_device, description_,
+        driver_, FromDawnEnum(backend_type_), FromDawnEnum(adapter_type_),
         d3d_shader_model_, vk_driver_version_, FromDawnEnum(power_preference_));
 
     // SAFETY: Required from caller
@@ -144,8 +161,8 @@ GPUAdapterInfo* GPUAdapter::CreateAdapterInfoForAdapter() {
     }
   } else {
     info = MakeGarbageCollected<GPUAdapterInfo>(
-        vendor_, architecture_, subgroup_min_size_, subgroup_max_size_,
-        is_fallback_adapter);
+        exposed_vendor, exposed_architecture, subgroup_min_size_,
+        subgroup_max_size_, is_fallback_adapter);
   }
 
   // SAFETY: Required from caller
