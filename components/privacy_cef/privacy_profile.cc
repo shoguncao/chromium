@@ -160,7 +160,8 @@ std::string PrivacyProfile::SerializeForRenderer() const {
 
   base::DictValue hardware;
   hardware.Set("cpuCores", cpu_cores);
-  hardware.Set("memoryGB", memory_gb);
+  hardware.Set("physicalMemoryGB", physical_memory_gb);
+  hardware.Set("navigatorDeviceMemoryGB", navigator_device_memory_gb);
 
   base::DictValue display;
   display.Set("width", screen_width);
@@ -212,6 +213,15 @@ std::string PrivacyProfile::SerializeForRenderer() const {
   protections.Set("speech", ToString(speech_mode));
   protections.Set("webrtc", ToString(webrtc_mode));
   protections.Set("webgpu", ToString(webgpu_mode));
+  protections.Set("navigator",
+                  navigator_mode == NavigatorMode::kStandardize
+                      ? "standardize"
+                      : "off");
+
+  base::DictValue identity;
+  identity.Set("mode", identity_mode);
+  base::DictValue network_fingerprint;
+  network_fingerprint.Set("mode", network_fingerprint_mode);
 
   base::DictValue root;
   root.Set("schemaVersion", schema_version);
@@ -219,6 +229,8 @@ std::string PrivacyProfile::SerializeForRenderer() const {
   root.Set("displayName", display_name);
   root.Set("masterSeed", base::Base64Encode(master_seed));
   root.Set("preset", preset);
+  root.Set("identity", std::move(identity));
+  root.Set("networkFingerprint", std::move(network_fingerprint));
   root.Set("locale", std::move(locale));
   root.Set("hardware", std::move(hardware));
   root.Set("display", std::move(display));
@@ -273,12 +285,16 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
   }
 
   const base::DictValue* locale = RequiredDict(*root, "locale", error);
+  const base::DictValue* identity = RequiredDict(*root, "identity", error);
+  const base::DictValue* network_fingerprint =
+      RequiredDict(*root, "networkFingerprint", error);
   const base::DictValue* hardware = RequiredDict(*root, "hardware", error);
   const base::DictValue* display = RequiredDict(*root, "display", error);
   const base::DictValue* audit = RequiredDict(*root, "audit", error);
   const base::DictValue* protections =
       RequiredDict(*root, "protections", error);
-  if (!locale || !hardware || !display || !audit || !protections) {
+  if (!locale || !identity || !network_fingerprint || !hardware || !display ||
+      !audit || !protections) {
     return std::nullopt;
   }
   const base::DictValue* canvas = RequiredDict(*protections, "canvas", error);
@@ -287,10 +303,16 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
   }
 
   const std::string* language = RequiredString(*locale, "language", error);
+  const std::string* identity_mode = RequiredString(*identity, "mode", error);
+  const std::string* network_fingerprint_mode =
+      RequiredString(*network_fingerprint, "mode", error);
   const base::ListValue* languages = locale->FindList("languages");
   const std::string* timezone = RequiredString(*locale, "timezone", error);
   std::optional<int> cpu_cores = RequiredInt(*hardware, "cpuCores", error);
-  std::optional<int> memory_gb = RequiredInt(*hardware, "memoryGB", error);
+  std::optional<int> physical_memory_gb =
+      RequiredInt(*hardware, "physicalMemoryGB", error);
+  std::optional<int> navigator_device_memory_gb =
+      RequiredInt(*hardware, "navigatorDeviceMemoryGB", error);
   std::optional<int> width = RequiredInt(*display, "width", error);
   std::optional<int> height = RequiredInt(*display, "height", error);
   std::optional<int> scale = RequiredInt(*display, "deviceScaleFactor", error);
@@ -317,21 +339,29 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
       RequiredString(*protections, "webrtc", error);
   const std::string* webgpu_mode =
       RequiredString(*protections, "webgpu", error);
-  if (!language || !languages || languages->empty() || !timezone ||
-      !cpu_cores || !memory_gb || !width || !height || !scale || !depth ||
+  const std::string* navigator_mode =
+      RequiredString(*protections, "navigator", error);
+  if (!language || !identity_mode || !network_fingerprint_mode || !languages ||
+      languages->empty() || !timezone ||
+      !cpu_cores || !physical_memory_gb || !navigator_device_memory_gb ||
+      !width || !height || !scale || !depth ||
       !gamut || !audit_mode || !retention || !max_size || !canvas_mode ||
       !canvas_algorithm || !canvas_version || !webgl_mode || !audio_mode ||
       !fonts_mode || !geometry_mode || !storage_mode || !speech_mode ||
-      !webrtc_mode || !webgpu_mode) {
+      !webrtc_mode || !webgpu_mode || !navigator_mode) {
     return std::nullopt;
   }
 
-  constexpr int kCpuCoreBuckets[] = {2, 4, 8, 12, 16};
-  constexpr int kMemoryGbBuckets[] = {4, 8, 16, 32};
+  constexpr int kCpuCoreBuckets[] = {8, 10, 12, 16};
+  constexpr int kPhysicalMemoryGbBuckets[] = {8, 16, 32};
+  constexpr int kNavigatorMemoryGbBuckets[] = {8, 16, 32};
   if (std::ranges::find(kCpuCoreBuckets, *cpu_cores) ==
           std::ranges::end(kCpuCoreBuckets) ||
-      std::ranges::find(kMemoryGbBuckets, *memory_gb) ==
-          std::ranges::end(kMemoryGbBuckets) ||
+      std::ranges::find(kPhysicalMemoryGbBuckets, *physical_memory_gb) ==
+          std::ranges::end(kPhysicalMemoryGbBuckets) ||
+      std::ranges::find(kNavigatorMemoryGbBuckets,
+                        *navigator_device_memory_gb) ==
+          std::ranges::end(kNavigatorMemoryGbBuckets) ||
       *width <= 0 || *height <= 0 || (*scale != 1 && *scale != 2) ||
       *retention < 1 || *retention > 30 || *max_size < 1 || *max_size > 100) {
     Fail("profile contains an out-of-range numeric value", error);
@@ -439,12 +469,27 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
     Fail("unsupported WebGPU mode", error);
     return std::nullopt;
   }
+  if (*navigator_mode == "off") {
+    profile.navigator_mode = NavigatorMode::kOff;
+  } else if (*navigator_mode == "standardize") {
+    profile.navigator_mode = NavigatorMode::kStandardize;
+  } else {
+    Fail("unsupported Navigator mode", error);
+    return std::nullopt;
+  }
+  if (*identity_mode != "engine-consistent" ||
+      *network_fingerprint_mode != "chromium-sdk-default") {
+    Fail("unsupported identity or network fingerprint mode", error);
+    return std::nullopt;
+  }
 
   profile.schema_version = *schema_version;
   profile.profile_id = *profile_id;
   profile.display_name = *display_name;
   std::ranges::copy(*decoded_seed, profile.master_seed.begin());
   profile.preset = *preset;
+  profile.identity_mode = *identity_mode;
+  profile.network_fingerprint_mode = *network_fingerprint_mode;
   profile.language = *language;
   for (const base::Value& item : *languages) {
     if (!item.is_string() || item.GetString().empty()) {
@@ -459,7 +504,8 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
   }
   profile.timezone = *timezone;
   profile.cpu_cores = *cpu_cores;
-  profile.memory_gb = *memory_gb;
+  profile.physical_memory_gb = *physical_memory_gb;
+  profile.navigator_device_memory_gb = *navigator_device_memory_gb;
   profile.screen_width = *width;
   profile.screen_height = *height;
   profile.device_scale_factor = *scale;

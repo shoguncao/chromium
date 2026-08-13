@@ -135,7 +135,8 @@ TEST_F(PrivacyRuntimeTest, NavigatorHardwareUsesProfileAndDefaultsToNative) {
 
   PrivacyProfile profile = FarblingProfile();
   profile.cpu_cores = 12;
-  profile.memory_gb = 32;
+  profile.physical_memory_gb = 32;
+  profile.navigator_device_memory_gb = 32;
   PrivacyRuntime::GetInstance().SetProfile(std::move(profile));
   EXPECT_EQ(PrivacyRuntime::GetInstance().GetProfileCpuCores(), 12);
   EXPECT_EQ(PrivacyRuntime::GetInstance().GetProfileMemoryGb(), 32);

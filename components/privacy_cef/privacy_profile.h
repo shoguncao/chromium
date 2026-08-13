@@ -25,9 +25,10 @@ enum class StorageMode { kOff, kBucket };
 enum class SpeechMode { kOff, kStandardize, kBlock };
 enum class WebRtcMode { kOff, kNoLocalIp, kBlock };
 enum class WebGpuMode { kOff, kStandardize, kDisabled };
+enum class NavigatorMode { kOff, kStandardize };
 
 struct PrivacyProfile {
-  static constexpr int kSupportedSchemaVersion = 1;
+  static constexpr int kSupportedSchemaVersion = 2;
   static constexpr int kMasterSeedBytes = 32;
 
   PrivacyProfile();
@@ -42,11 +43,14 @@ struct PrivacyProfile {
   std::string display_name;
   std::array<uint8_t, kMasterSeedBytes> master_seed{};
   std::string preset;
+  std::string identity_mode;
+  std::string network_fingerprint_mode;
   std::string language;
   std::vector<std::string> languages;
   std::string timezone;
   int cpu_cores = 0;
-  int memory_gb = 0;
+  int physical_memory_gb = 0;
+  int navigator_device_memory_gb = 0;
   int screen_width = 0;
   int screen_height = 0;
   int device_scale_factor = 0;
@@ -66,6 +70,7 @@ struct PrivacyProfile {
   SpeechMode speech_mode = SpeechMode::kOff;
   WebRtcMode webrtc_mode = WebRtcMode::kOff;
   WebGpuMode webgpu_mode = WebGpuMode::kOff;
+  NavigatorMode navigator_mode = NavigatorMode::kOff;
 
   static std::optional<PrivacyProfile> LoadFromFile(const base::FilePath& path,
                                                     std::string* error);

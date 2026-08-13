@@ -45,6 +45,8 @@
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "ui/base/cursor/cursor.h"
+#include "ui/display/screen_info.h"
+#include "ui/display/screen_infos.h"
 
 namespace ui {
 class Cursor;
@@ -357,6 +359,8 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
       int minimum_size = blink::kMinimumWindowSize);
 
   WebViewImpl* web_view_;  // Weak pointer.
+  mutable display::ScreenInfo privacy_profiled_screen_info_;
+  mutable display::ScreenInfos privacy_profiled_screen_infos_;
   HeapHashSet<WeakMember<PopupOpeningObserver>> popup_opening_observers_;
   Vector<scoped_refptr<FileChooser>> file_chooser_queue_;
   ui::Cursor last_set_mouse_cursor_for_testing_;

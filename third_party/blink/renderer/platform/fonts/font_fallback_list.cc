@@ -28,6 +28,9 @@
 
 #include "third_party/blink/renderer/platform/fonts/font_fallback_list.h"
 
+#include "components/privacy_cef/privacy_runtime.h"
+#include "third_party/blink/renderer/privacy_cef/font_whitelist.h"
+
 #include "base/timer/elapsed_timer.h"
 #include "third_party/blink/renderer/platform/font_family_names.h"
 #include "third_party/blink/renderer/platform/fonts/alternate_font_family.h"
@@ -171,6 +174,13 @@ const FontData* FontFallbackList::GetFontData(
     if (!result && !curr_family->FamilyName().empty()) {
       result = FontCache::Get().GetFontData(font_description,
                                             curr_family->FamilyName());
+      if (result &&
+          privacy_cef::PrivacyRuntime::GetInstance().GetFontsMode() ==
+              privacy_cef::FontsMode::kStandardize &&
+          !privacy_cef::AllowFontByFamilyName(curr_family->FamilyName(),
+                                               String())) {
+        result = nullptr;
+      }
     }
     if (result) {
       return result;

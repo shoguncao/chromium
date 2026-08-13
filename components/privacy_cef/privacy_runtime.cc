@@ -340,6 +340,30 @@ WebGpuMode PrivacyRuntime::GetWebGpuMode() const {
   return state().profile ? state().profile->webgpu_mode : WebGpuMode::kOff;
 }
 
+FontsMode PrivacyRuntime::GetFontsMode() const {
+  base::AutoLock lock(state().lock);
+  return state().profile ? state().profile->fonts_mode : FontsMode::kOff;
+}
+
+NavigatorMode PrivacyRuntime::GetNavigatorMode() const {
+  base::AutoLock lock(state().lock);
+  return state().profile ? state().profile->navigator_mode
+                         : NavigatorMode::kOff;
+}
+
+std::optional<PrivacyRuntime::DisplayProfile>
+PrivacyRuntime::GetDisplayProfile() const {
+  base::AutoLock lock(state().lock);
+  if (!state().profile) {
+    return std::nullopt;
+  }
+  return DisplayProfile{state().profile->screen_width,
+                        state().profile->screen_height,
+                        state().profile->device_scale_factor,
+                        state().profile->color_depth,
+                        state().profile->color_gamut};
+}
+
 void PrivacyRuntime::RecordWebGpuAccess(
     std::string_view top_level_site,
     std::string policy_decision,
@@ -364,7 +388,8 @@ std::optional<int> PrivacyRuntime::GetProfileCpuCores() const {
 
 std::optional<int> PrivacyRuntime::GetProfileMemoryGb() const {
   base::AutoLock lock(state().lock);
-  return state().profile ? std::optional(state().profile->memory_gb)
+  return state().profile
+             ? std::optional(state().profile->navigator_device_memory_gb)
                          : std::nullopt;
 }
 

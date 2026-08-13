@@ -48,6 +48,7 @@
 #include "base/unguessable_token.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "components/privacy_cef/privacy_runtime.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "services/network/public/cpp/features.h"
@@ -1841,6 +1842,14 @@ mojom::blink::DevicePostureType LocalFrame::GetDevicePosture() {
 double LocalFrame::DevicePixelRatio() const {
   if (!page_)
     return 0;
+
+  if (const auto display =
+          privacy_cef::PrivacyRuntime::GetInstance().GetDisplayProfile()) {
+    // LayoutZoomFactor already contains the host display scale on desktop.
+    // The profile value replaces that observable value instead of multiplying
+    // it, otherwise a Retina host would expose 4 for a profile DPR of 2.
+    return display->device_scale_factor;
+  }
 
   double ratio = page_->InspectorDeviceScaleFactorOverride();
   ratio *= LayoutZoomFactor();
