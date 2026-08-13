@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/modules/webaudio/analyser_handler.h"
 
+#include "third_party/blink/renderer/core/html/canvas/privacy_canvas_context.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_node_input.h"
 #include "third_party/blink/renderer/modules/webaudio/audio_node_output.h"
 #include "third_party/blink/renderer/modules/webaudio/base_audio_context.h"
@@ -23,6 +24,13 @@ constexpr unsigned kDefaultNumberOfOutputChannels = 1;
 AnalyserHandler::AnalyserHandler(AudioNode& node, float sample_rate)
     : AudioHandler(NodeType::kNodeTypeAnalyser, node, sample_rate),
       analyser_(node.context()->renderQuantumSize()) {
+  if (ExecutionContext* context = node.GetExecutionContext()) {
+    const std::string top_level_site = PrivacyCanvasTopLevelSite(context);
+    analyser_.SetPrivacyContext(
+        top_level_site, PrivacyExecutionAuditContext(context, "AnalyserNode"),
+        privacy_cef::PrivacyRuntime::GetInstance().GetAudioFarblingParameters(
+            top_level_site));
+  }
   AddInput();
   channel_count_ = kDefaultNumberOfInputChannels;
   AddOutput(kDefaultNumberOfOutputChannels);
@@ -44,8 +52,8 @@ void AnalyserHandler::Process(uint32_t frames_to_process) {
 
   // It's possible that output is not connected. Assign nullptr to indicate
   // such case.
-  AudioBus* output_bus = Output(0).RenderingFanOutCount() > 0
-      ? Output(0).Bus() : nullptr;
+  AudioBus* output_bus =
+      Output(0).RenderingFanOutCount() > 0 ? Output(0).Bus() : nullptr;
 
   if (!IsInitialized() && output_bus) {
     output_bus->Zero();
@@ -190,8 +198,8 @@ double AnalyserHandler::TailTime() const {
 void AnalyserHandler::PullInputs(uint32_t frames_to_process) {
   DCHECK(Context()->IsAudioThread());
 
-  AudioBus* output_bus = Output(0).RenderingFanOutCount() > 0
-      ? Output(0).Bus() : nullptr;
+  AudioBus* output_bus =
+      Output(0).RenderingFanOutCount() > 0 ? Output(0).Bus() : nullptr;
 
   Input(0).Pull(output_bus, frames_to_process);
 }
