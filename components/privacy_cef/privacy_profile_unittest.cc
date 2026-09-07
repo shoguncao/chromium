@@ -97,6 +97,23 @@ TEST(PrivacyProfileTest, RejectsUnknownCanvasAlgorithmVersion) {
   EXPECT_EQ(error, "unsupported Canvas farbling algorithm");
 }
 
+TEST(PrivacyProfileTest, ParsesProfileWithoutLocale) {
+  std::string json = kValidProfile;
+  constexpr std::string_view kLocaleLine =
+      "  \"locale\": {\"language\":\"en-US\",\"languages\":[\"en-US\",\"en\"],"
+      "\"timezone\":\"America/Los_Angeles\"},\n";
+  const size_t pos = json.find(kLocaleLine);
+  ASSERT_NE(pos, std::string::npos);
+  json.erase(pos, kLocaleLine.size());
+  std::string error;
+  std::optional<PrivacyProfile> profile = PrivacyProfile::Parse(json, &error);
+  ASSERT_TRUE(profile) << error;
+  EXPECT_TRUE(profile->language.empty());
+  EXPECT_TRUE(profile->languages.empty());
+  EXPECT_TRUE(profile->timezone.empty());
+  EXPECT_EQ(profile->cpu_cores, 8);
+}
+
 TEST(PrivacyProfileTest, RendererPayloadRoundTripsThroughValidation) {
   std::string error;
   std::optional<PrivacyProfile> profile =

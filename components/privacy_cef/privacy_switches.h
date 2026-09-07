@@ -10,6 +10,8 @@ namespace privacy_cef::switches {
 extern const char kPrivacyProfilePath[];
 extern const char kPrivacyAuditMode[];
 extern const char kPrivacyAuditLogPath[];
+extern const char kPrivacyTimezone[];
+extern const char kPrivacyAcceptLanguage[];
 
 }  // namespace privacy_cef::switches
 

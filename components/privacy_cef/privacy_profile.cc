@@ -149,15 +149,6 @@ PrivacyProfile& PrivacyProfile::operator=(PrivacyProfile&&) = default;
 PrivacyProfile::~PrivacyProfile() = default;
 
 std::string PrivacyProfile::SerializeForRenderer() const {
-  base::DictValue locale;
-  locale.Set("language", language);
-  base::ListValue language_list;
-  for (const std::string& item : languages) {
-    language_list.Append(item);
-  }
-  locale.Set("languages", std::move(language_list));
-  locale.Set("timezone", timezone);
-
   base::DictValue hardware;
   hardware.Set("cpuCores", cpu_cores);
   hardware.Set("physicalMemoryGB", physical_memory_gb);
@@ -231,7 +222,17 @@ std::string PrivacyProfile::SerializeForRenderer() const {
   root.Set("preset", preset);
   root.Set("identity", std::move(identity));
   root.Set("networkFingerprint", std::move(network_fingerprint));
-  root.Set("locale", std::move(locale));
+  if (!language.empty() || !timezone.empty() || !languages.empty()) {
+    base::DictValue locale;
+    locale.Set("language", language);
+    base::ListValue language_list;
+    for (const std::string& item : languages) {
+      language_list.Append(item);
+    }
+    locale.Set("languages", std::move(language_list));
+    locale.Set("timezone", timezone);
+    root.Set("locale", std::move(locale));
+  }
   root.Set("hardware", std::move(hardware));
   root.Set("display", std::move(display));
   root.Set("audit", std::move(audit));
@@ -284,7 +285,7 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
     return std::nullopt;
   }
 
-  const base::DictValue* locale = RequiredDict(*root, "locale", error);
+  const base::DictValue* locale = root->FindDict("locale");
   const base::DictValue* identity = RequiredDict(*root, "identity", error);
   const base::DictValue* network_fingerprint =
       RequiredDict(*root, "networkFingerprint", error);
@@ -293,8 +294,8 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
   const base::DictValue* audit = RequiredDict(*root, "audit", error);
   const base::DictValue* protections =
       RequiredDict(*root, "protections", error);
-  if (!locale || !identity || !network_fingerprint || !hardware || !display ||
-      !audit || !protections) {
+  if (!identity || !network_fingerprint || !hardware || !display || !audit ||
+      !protections) {
     return std::nullopt;
   }
   const base::DictValue* canvas = RequiredDict(*protections, "canvas", error);
@@ -302,12 +303,19 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
     return std::nullopt;
   }
 
-  const std::string* language = RequiredString(*locale, "language", error);
+  // Locale is optional: browser timezone/language come from live egress IP
+  // switches, not from the privacy profile file.
+  const std::string* language = nullptr;
+  const base::ListValue* languages = nullptr;
+  const std::string* timezone = nullptr;
+  if (locale) {
+    language = locale->FindString("language");
+    languages = locale->FindList("languages");
+    timezone = locale->FindString("timezone");
+  }
   const std::string* identity_mode = RequiredString(*identity, "mode", error);
   const std::string* network_fingerprint_mode =
       RequiredString(*network_fingerprint, "mode", error);
-  const base::ListValue* languages = locale->FindList("languages");
-  const std::string* timezone = RequiredString(*locale, "timezone", error);
   std::optional<int> cpu_cores = RequiredInt(*hardware, "cpuCores", error);
   std::optional<int> physical_memory_gb =
       RequiredInt(*hardware, "physicalMemoryGB", error);
@@ -341,14 +349,12 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
       RequiredString(*protections, "webgpu", error);
   const std::string* navigator_mode =
       RequiredString(*protections, "navigator", error);
-  if (!language || !identity_mode || !network_fingerprint_mode || !languages ||
-      languages->empty() || !timezone ||
-      !cpu_cores || !physical_memory_gb || !navigator_device_memory_gb ||
-      !width || !height || !scale || !depth ||
-      !gamut || !audit_mode || !retention || !max_size || !canvas_mode ||
-      !canvas_algorithm || !canvas_version || !webgl_mode || !audio_mode ||
-      !fonts_mode || !geometry_mode || !storage_mode || !speech_mode ||
-      !webrtc_mode || !webgpu_mode || !navigator_mode) {
+  if (!identity_mode || !network_fingerprint_mode || !cpu_cores ||
+      !physical_memory_gb || !navigator_device_memory_gb || !width || !height ||
+      !scale || !depth || !gamut || !audit_mode || !retention || !max_size ||
+      !canvas_mode || !canvas_algorithm || !canvas_version || !webgl_mode ||
+      !audio_mode || !fonts_mode || !geometry_mode || !storage_mode ||
+      !speech_mode || !webrtc_mode || !webgpu_mode || !navigator_mode) {
     return std::nullopt;
   }
 
@@ -490,19 +496,26 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
   profile.preset = *preset;
   profile.identity_mode = *identity_mode;
   profile.network_fingerprint_mode = *network_fingerprint_mode;
-  profile.language = *language;
-  for (const base::Value& item : *languages) {
-    if (!item.is_string() || item.GetString().empty()) {
-      Fail("languages must only contain non-empty strings", error);
+  if (language && !language->empty()) {
+    profile.language = *language;
+  }
+  if (languages) {
+    for (const base::Value& item : *languages) {
+      if (!item.is_string() || item.GetString().empty()) {
+        Fail("languages must only contain non-empty strings", error);
+        return std::nullopt;
+      }
+      profile.languages.push_back(item.GetString());
+    }
+    if (!profile.languages.empty() && !profile.language.empty() &&
+        profile.languages.front() != profile.language) {
+      Fail("primary language must be first in languages", error);
       return std::nullopt;
     }
-    profile.languages.push_back(item.GetString());
   }
-  if (profile.languages.front() != profile.language) {
-    Fail("primary language must be first in languages", error);
-    return std::nullopt;
+  if (timezone && !timezone->empty()) {
+    profile.timezone = *timezone;
   }
-  profile.timezone = *timezone;
   profile.cpu_cores = *cpu_cores;
   profile.physical_memory_gb = *physical_memory_gb;
   profile.navigator_device_memory_gb = *navigator_device_memory_gb;
