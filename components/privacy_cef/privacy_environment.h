@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/values.h"
+#include "components/privacy_cef/privacy_timezone.h"
 
 namespace privacy_cef {
 
