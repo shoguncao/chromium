@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "components/privacy_cef/privacy_environment.h"
 
 namespace privacy_cef {
 
@@ -48,6 +49,10 @@ struct PrivacyProfile {
   std::string language;
   std::vector<std::string> languages;
   std::string timezone;
+  // Everything that must agree with the egress IP (time zone, language and
+  // region, geolocation, WebRTC exposure). Optional: when it is absent the
+  // browser keeps its platform derived values.
+  IpEnvironment ip_environment;
   int cpu_cores = 0;
   int physical_memory_gb = 0;
   int navigator_device_memory_gb = 0;

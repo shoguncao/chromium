@@ -13,6 +13,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/values.h"
+#include "components/privacy_cef/privacy_environment.h"
 
 namespace privacy_cef {
 namespace {
@@ -232,6 +233,9 @@ std::string PrivacyProfile::SerializeForRenderer() const {
   root.Set("identity", std::move(identity));
   root.Set("networkFingerprint", std::move(network_fingerprint));
   root.Set("locale", std::move(locale));
+  if (ip_environment.configured) {
+    root.Set("ipEnvironment", ip_environment.ToDict());
+  }
   root.Set("hardware", std::move(hardware));
   root.Set("display", std::move(display));
   root.Set("audit", std::move(audit));
@@ -502,6 +506,14 @@ std::optional<PrivacyProfile> PrivacyProfile::Parse(std::string_view json,
     Fail("primary language must be first in languages", error);
     return std::nullopt;
   }
+  // Parsed last so that a malformed ipEnvironment rejects the whole profile
+  // instead of silently falling back to platform values.
+  std::optional<IpEnvironment> ip_environment =
+      IpEnvironment::Parse(*root, error);
+  if (!ip_environment) {
+    return std::nullopt;
+  }
+  profile.ip_environment = *ip_environment;
   profile.timezone = *timezone;
   profile.cpu_cores = *cpu_cores;
   profile.physical_memory_gb = *physical_memory_gb;
