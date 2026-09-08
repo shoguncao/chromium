@@ -21,11 +21,10 @@
 namespace privacy_cef {
 namespace {
 
-bool Fail(std::string* error, const std::string& message) {
+void SetError(std::string* error, const std::string& message) {
   if (error) {
     *error = message;
   }
-  return false;
 }
 
 // Accepts "en", "en-US", "zh-Hans-CN". Rejects empty and malformed values.
@@ -52,10 +51,10 @@ std::string RegionFromLocale(std::string_view locale) {
   if (pos == std::string_view::npos) {
     return std::string();
   }
-  std::string region(locale.substr(pos + 1));
-  // Script subtags such as "zh-Hans-CN" leave the region last; a 2 letter or
-  // 3 digit value is a region, anything else (e.g. "Hans") is not.
-  if (region.size() == 2 || (region.size() == 3 && base::IsAsciiDigit(region[0]))) {
+  const std::string region(locale.substr(pos + 1));
+  // A 2 letter or 3 digit subtag is a region; a script such as "Hans" is not.
+  if (region.size() == 2 ||
+      (region.size() == 3 && base::IsAsciiDigit(region[0]))) {
     return base::ToUpperASCII(region);
   }
   return std::string();
@@ -75,42 +74,44 @@ std::optional<IpEnvironment> IpEnvironment::Parse(const base::DictValue& root,
 
   const std::string* timezone = environment->FindString("timezone");
   if (!timezone || timezone->empty()) {
-    return std::nullopt, Fail(error, "ipEnvironment.timezone is required");
+    SetError(error, "ipEnvironment.timezone is required");
+    return std::nullopt;
   }
   if (!IsValidTimeZoneId(*timezone)) {
-    return std::nullopt,
-           Fail(error, "ipEnvironment.timezone is not a valid IANA ID: " +
-                           *timezone);
+    SetError(error,
+             "ipEnvironment.timezone is not a valid IANA ID: " + *timezone);
+    return std::nullopt;
   }
   result.timezone = *timezone;
 
   const std::string* locale = environment->FindString("locale");
   if (!locale || locale->empty()) {
-    return std::nullopt, Fail(error, "ipEnvironment.locale is required");
+    SetError(error, "ipEnvironment.locale is required");
+    return std::nullopt;
   }
   if (!IsValidLocale(*locale)) {
-    return std::nullopt,
-           Fail(error, "ipEnvironment.locale is malformed: " + *locale);
+    SetError(error, "ipEnvironment.locale is malformed: " + *locale);
+    return std::nullopt;
   }
   result.locale = *locale;
 
   if (const base::ListValue* languages = environment->FindList("languages")) {
     for (const base::Value& item : *languages) {
       if (!item.is_string() || item.GetString().empty()) {
-        return std::nullopt,
-               Fail(error, "ipEnvironment.languages must only contain strings");
+        SetError(error, "ipEnvironment.languages must only contain strings");
+        return std::nullopt;
       }
       result.languages.push_back(item.GetString());
     }
     if (result.languages.empty()) {
-      return std::nullopt,
-             Fail(error, "ipEnvironment.languages must not be empty");
+      SetError(error, "ipEnvironment.languages must not be empty");
+      return std::nullopt;
     }
     if (!base::EqualsCaseInsensitiveASCII(result.languages.front(),
                                           result.locale)) {
-      return std::nullopt,
-             Fail(error,
-                  "ipEnvironment.languages[0] must equal ipEnvironment.locale");
+      SetError(error,
+               "ipEnvironment.languages[0] must equal ipEnvironment.locale");
+      return std::nullopt;
     }
   }
 
@@ -121,7 +122,8 @@ std::optional<IpEnvironment> IpEnvironment::Parse(const base::DictValue& root,
   if (const base::DictValue* geo = environment->FindDict("geo")) {
     const std::string* mode = geo->FindString("mode");
     if (!mode) {
-      return std::nullopt, Fail(error, "ipEnvironment.geo.mode is required");
+      SetError(error, "ipEnvironment.geo.mode is required");
+      return std::nullopt;
     }
     if (*mode == "spoof") {
       result.geo_mode = GeoMode::kSpoof;
@@ -129,22 +131,23 @@ std::optional<IpEnvironment> IpEnvironment::Parse(const base::DictValue& root,
       const std::optional<double> longitude = geo->FindDouble("longitude");
       const std::optional<double> accuracy = geo->FindDouble("accuracy");
       if (!latitude || !longitude || !accuracy) {
-        return std::nullopt, Fail(error,
-                                  "ipEnvironment.geo requires latitude, "
-                                  "longitude and accuracy in spoof mode");
+        SetError(error,
+                 "ipEnvironment.geo requires latitude, longitude and accuracy "
+                 "in spoof mode");
+        return std::nullopt;
       }
       if (!std::isfinite(*latitude) || *latitude < -90.0 || *latitude > 90.0) {
-        return std::nullopt,
-               Fail(error, "ipEnvironment.geo.latitude is out of range");
+        SetError(error, "ipEnvironment.geo.latitude is out of range");
+        return std::nullopt;
       }
       if (!std::isfinite(*longitude) || *longitude < -180.0 ||
           *longitude > 180.0) {
-        return std::nullopt,
-               Fail(error, "ipEnvironment.geo.longitude is out of range");
+        SetError(error, "ipEnvironment.geo.longitude is out of range");
+        return std::nullopt;
       }
       if (!std::isfinite(*accuracy) || *accuracy <= 0.0) {
-        return std::nullopt,
-               Fail(error, "ipEnvironment.geo.accuracy must be positive");
+        SetError(error, "ipEnvironment.geo.accuracy must be positive");
+        return std::nullopt;
       }
       result.geo_latitude = *latitude;
       result.geo_longitude = *longitude;
@@ -152,8 +155,8 @@ std::optional<IpEnvironment> IpEnvironment::Parse(const base::DictValue& root,
     } else if (*mode == "block") {
       result.geo_mode = GeoMode::kBlock;
     } else {
-      return std::nullopt,
-             Fail(error, "ipEnvironment.geo.mode is invalid: " + *mode);
+      SetError(error, "ipEnvironment.geo.mode is invalid: " + *mode);
+      return std::nullopt;
     }
   }
 
@@ -163,13 +166,14 @@ std::optional<IpEnvironment> IpEnvironment::Parse(const base::DictValue& root,
       if (*handling == "default") {
         result.webrtc_ip_handling = WebrtcIpHandling::kDefault;
       } else if (*handling == "default_public_interface_only") {
-        result.webrtc_ip_handling = WebrtcIpHandling::kDefaultPublicInterfaceOnly;
+        result.webrtc_ip_handling =
+            WebrtcIpHandling::kDefaultPublicInterfaceOnly;
       } else if (*handling == "disable_non_proxied_udp") {
         result.webrtc_ip_handling = WebrtcIpHandling::kDisableNonProxiedUdp;
       } else {
-        return std::nullopt,
-               Fail(error,
-                    "ipEnvironment.webrtc.ipHandling is invalid: " + *handling);
+        SetError(error,
+                 "ipEnvironment.webrtc.ipHandling is invalid: " + *handling);
+        return std::nullopt;
       }
     }
   }
@@ -189,7 +193,7 @@ void IpEnvironment::FillDefaults() {
     region = RegionFromLocale(locale);
   }
   if (webrtc_ip_handling == WebrtcIpHandling::kUnset) {
-    // Fail closed: without this, ICE candidates leak the real egress IP and
+    // Fail closed: without this, ICE candidates reveal the real egress IP and
     // every other spoofed value becomes pointless.
     webrtc_ip_handling = WebrtcIpHandling::kDisableNonProxiedUdp;
   }
@@ -207,7 +211,7 @@ std::string IpEnvironment::languages_csv() const {
 }
 
 std::string IpEnvironment::accept_languages_header() const {
-  // Mirrors the weighting Chromium produces from the accept languages pref.
+  // Mirrors the weighting Chromium derives from the accept languages pref.
   std::string out;
   double quality = 1.0;
   for (const std::string& language : languages) {
@@ -252,7 +256,8 @@ base::DictValue IpEnvironment::ToDict() const {
     }
     dict.Set("geo", std::move(geo));
   }
-  const std::string handling = ToWebRtcIpHandlingPolicyValue(webrtc_ip_handling);
+  const std::string handling =
+      ToWebRtcIpHandlingPolicyValue(webrtc_ip_handling);
   if (!handling.empty()) {
     base::DictValue webrtc;
     webrtc.Set("ipHandling", handling);
@@ -266,10 +271,7 @@ bool SetProcessLocale(std::string_view locale) {
     LOG(ERROR) << "[privacy_cef][env] locale rejected (empty)";
     return false;
   }
-  const std::string previous = base::i18n::GetConfiguredLocale();
   base::i18n::SetICUDefaultLocale(locale);
-  LOG(INFO) << "[privacy_cef][env] locale applied locale=" << locale
-            << " previous=" << previous;
   return true;
 }
 
